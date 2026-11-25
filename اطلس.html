@@ -1,0 +1,3279 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" class="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+  <title>أطلس العالم التفاعلي | تعلّم جغرافيا العالم وإتقان الدول الـ195</title>
+  
+  <!-- Google Fonts: Cairo & Tajawal -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Cairo', 'Tajawal', 'sans-serif'],
+          },
+          colors: {
+            slate: {
+              850: '#172033',
+              950: '#0b1120',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- D3.js v7 & TopoJSON Client v3 (with resilient synchronous fallback) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js" crossorigin="anonymous"></script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+    body {
+      font-family: 'Cairo', 'Tajawal', sans-serif;
+      overflow-x: hidden;
+    }
+    /* Custom Scrollbars */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(148, 163, 184, 0.4);
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(148, 163, 184, 0.7);
+    }
+
+    /* Map Vector Styles */
+    #world-map-svg {
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+      cursor: grab;
+      user-select: none;
+    }
+    #world-map-svg:active {
+      cursor: grabbing;
+    }
+    .country-path {
+      stroke: #475569;
+      stroke-width: 1.1px;
+      stroke-linejoin: round;
+      stroke-linecap: round;
+      vector-effect: non-scaling-stroke;
+      transition: fill 0.25s ease, opacity 0.25s ease;
+      cursor: pointer;
+    }
+    .dark .country-path {
+      stroke: #94a3b8;
+    }
+    .country-path:hover {
+      filter: brightness(1.06);
+      stroke: #0284c7;
+      stroke-width: 1.5px;
+    }
+    .country-path.dimmed {
+      opacity: 0.18;
+      pointer-events: none;
+    }
+    .country-path.selected-country {
+      stroke: #0ea5e9 !important;
+      stroke-width: 1.8px !important;
+    }
+    .country-path.quiz-target-blue,
+    .microstate-marker.quiz-target-blue {
+      fill: #2563eb !important;
+      stroke: #1e3a8a !important;
+      stroke-width: 1.5px !important;
+    }
+    .country-path.quiz-correct {
+      fill: #10b981 !important;
+      stroke: #047857 !important;
+      stroke-width: 1.6px !important;
+    }
+    .country-path.quiz-wrong {
+      fill: #ef4444 !important;
+      stroke: #b91c1c !important;
+      stroke-width: 1.6px !important;
+    }
+    .country-mesh-layer {
+      fill: none;
+      stroke: #475569;
+      stroke-width: 1.1px;
+      stroke-linejoin: round;
+      stroke-linecap: round;
+      vector-effect: non-scaling-stroke;
+      pointer-events: none;
+    }
+    .dark .country-mesh-layer {
+      stroke: #cbd5e1;
+    }
+
+    /* Microstate & Island Markers */
+    .microstate-marker {
+      cursor: pointer;
+      transition: r 0.2s ease, fill 0.25s ease, stroke-width 0.2s ease;
+      stroke: #ffffff;
+      stroke-width: 0.9px;
+    }
+    .dark .microstate-marker {
+      stroke: #0f172a;
+    }
+    .microstate-hit-area {
+      fill: transparent;
+      cursor: pointer;
+    }
+    .microstate-marker:hover {
+      stroke: #0284c7;
+      stroke-width: 2px;
+    }
+    .microstate-marker.dimmed {
+      opacity: 0.15;
+      pointer-events: none;
+    }
+    .microstate-marker.selected-country {
+      stroke: #0ea5e9 !important;
+      stroke-width: 2.5px !important;
+    }
+    .microstate-marker.quiz-correct {
+      fill: #10b981 !important;
+      stroke: #ffffff !important;
+      stroke-width: 2.5px !important;
+    }
+    .microstate-marker.quiz-wrong {
+      fill: #ef4444 !important;
+      stroke: #ffffff !important;
+      stroke-width: 2.5px !important;
+    }
+
+    /* Map Labels */
+    .map-label {
+      font-family: 'Cairo', sans-serif;
+      font-weight: 700;
+      pointer-events: none;
+      text-anchor: middle;
+      dominant-baseline: central;
+      paint-order: stroke;
+      stroke: rgba(255, 255, 255, 0.9);
+      stroke-width: 2.5px;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      fill: #0f172a;
+    }
+    .dark .map-label {
+      stroke: rgba(15, 23, 42, 0.92);
+      fill: #f8fafc;
+    }
+
+    /* Subtle Pulse Animation */
+    @keyframes pulseRing {
+      0% { transform: scale(0.95); opacity: 0.8; }
+      70% { transform: scale(1.6); opacity: 0; }
+      100% { transform: scale(1.6); opacity: 0; }
+    }
+    .pulse-circle {
+      transform-box: fill-box;
+      transform-origin: center;
+      animation: pulseRing 1.8s infinite;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-100 transition-colors duration-200 min-h-screen flex flex-col">
+
+  <!-- Top Navigation Header -->
+  <header class="sticky top-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur border-b border-slate-200 dark:border-slate-800 px-3 sm:px-5 h-16 flex items-center justify-between gap-2 shadow-sm">
+    <div class="flex items-center gap-2.5">
+      <button id="toggle-sidebar-btn" type="button" aria-label="القائمة الجانبية" class="p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+      <div class="flex items-center gap-2">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-sky-500 to-emerald-500 flex items-center justify-center text-white font-bold shadow-sm">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        </div>
+        <div>
+          <h1 class="text-base sm:text-lg font-extrabold tracking-tight leading-none text-slate-900 dark:text-white">أطلس العالم التفاعلي</h1>
+          <p class="text-[11px] text-slate-500 dark:text-slate-400 hidden sm:block">إتقان الدول الـ195: الموقع • العاصمة • العلم</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main View Switcher Tabs -->
+    <nav class="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl gap-1">
+      <button data-view="map" class="nav-tab active px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition bg-white dark:bg-slate-700 text-sky-600 dark:text-sky-400 shadow-sm">
+        الخريطة والتعلّم
+      </button>
+      <button data-view="exam" class="nav-tab px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white">
+        الامتحانات
+      </button>
+      <button data-view="review" class="nav-tab relative px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white">
+        المراجعة
+        <span id="review-badge" class="hidden absolute -top-1 -left-1 bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full">0</span>
+      </button>
+      <button data-view="stats" class="nav-tab px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white">
+        الإحصائيات
+      </button>
+    </nav>
+
+    <!-- Right Actions: Mastery Counter & Theme Toggle -->
+    <div class="flex items-center gap-2">
+          <div class="hidden md:flex items-center gap-2 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/60 px-3 py-1.5 rounded-xl">
+        <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+        <span class="text-xs font-bold text-emerald-700 dark:text-emerald-300">محفوظة: <span id="header-mastered-count">0</span> / 194</span>
+      </div>
+      <button id="theme-toggle-btn" type="button" aria-label="تبديل المظهر" class="p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition">
+        <svg id="sun-icon" class="w-5 h-5 hidden dark:block text-amber-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+        <svg id="moon-icon" class="w-5 h-5 block dark:hidden text-slate-700" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Workspace Container -->
+  <div class="flex-1 flex relative overflow-hidden">
+    
+    <!-- Mobile Sidebar Backdrop -->
+    <div id="sidebar-backdrop" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-30 hidden lg:hidden"></div>
+
+    <!-- Collapsible Sidebar (Continents, Subregions, Search, Custom Study Set) -->
+    <aside id="app-sidebar" class="fixed lg:static inset-y-0 right-0 z-30 w-80 sm:w-88 bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 flex flex-col transition-transform duration-300 ease-in-out translate-x-0 h-[calc(100vh-4rem)] shrink-0 shadow-xl lg:shadow-none">
+      
+      <!-- Search & Quick Study Tools -->
+      <div class="p-3 border-b border-slate-200 dark:border-slate-800 space-y-2.5">
+        <div class="relative">
+          <input id="sidebar-search" type="text" placeholder="ابحث عن دولة أو عاصمة..." class="w-full pr-9 pl-8 py-2 text-sm rounded-xl bg-slate-100 dark:bg-slate-800 border border-transparent focus:border-sky-500 focus:bg-white dark:focus:bg-slate-900 outline-none transition" />
+          <svg class="w-4 h-4 text-slate-400 absolute right-3 top-2.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          <button id="clear-search-btn" class="hidden absolute left-2.5 top-2 text-slate-400 hover:text-slate-600 text-xs font-bold">✕</button>
+        </div>
+
+        <!-- Study Set & Quick Batch Bar -->
+        <div class="flex items-center justify-between gap-1.5 text-xs">
+          <button id="open-batch-modal-btn" class="flex-1 py-1.5 px-2.5 rounded-lg bg-sky-50 hover:bg-sky-100 dark:bg-sky-950/60 dark:hover:bg-sky-900/60 text-sky-700 dark:text-sky-300 font-bold border border-sky-200 dark:border-sky-800/60 transition flex items-center justify-center gap-1">
+            <span>+ مجموعة تعلّم مخصصة</span>
+          </button>
+          <button id="suggested-path-btn" class="py-1.5 px-2.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold transition" title="مسار مقترح للمبتدئين">
+            مسار مقترح
+          </button>
+        </div>
+
+        <!-- Active Study Group Indicator -->
+        <div id="active-study-bar" class="hidden bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800/60 rounded-xl p-2.5 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-indigo-800 dark:text-indigo-200 truncate" id="active-study-title">مجموعة التعلم الحالية (0)</span>
+            <button id="clear-study-set-btn" class="text-[11px] text-rose-600 dark:text-rose-400 hover:underline font-bold">إلغاء</button>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <button id="study-set-prev-btn" class="px-2 py-1 rounded-lg bg-white dark:bg-slate-800 text-xs font-bold shadow-xs hover:bg-slate-50">السابق</button>
+            <button id="study-set-next-btn" class="px-2 py-1 rounded-lg bg-white dark:bg-slate-800 text-xs font-bold shadow-xs hover:bg-slate-50">التالي</button>
+            <button id="test-current-level-btn" class="flex-1 py-1 px-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition">
+              امتحان المستوى الحالي
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Continents & Subregions Tree -->
+      <div id="continents-tree" class="flex-1 overflow-y-auto p-2.5 space-y-2">
+        <!-- Populated dynamically via JS -->
+      </div>
+
+      <!-- Sidebar Footer: All World Reset -->
+      <div class="p-2.5 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+        <button id="show-all-world-btn" class="text-sky-600 dark:text-sky-400 font-bold hover:underline">عرض العالم كاملاً (194)</button>
+        <span id="sidebar-total-pct" class="font-bold">0% مكتمل</span>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 flex flex-col min-w-0 h-[calc(100vh-4rem)] overflow-y-auto relative">
+
+      <!-- VIEW 1: INTERACTIVE MAP & EXPLORATION -->
+      <section id="view-map" class="view-section flex-1 flex flex-col relative h-full">
+        
+        <!-- Map Top Controls Toolbar -->
+        <div class="bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-800 px-3 py-2 flex flex-wrap items-center justify-between gap-2 z-20">
+          
+          <!-- 4 Map Modes -->
+          <div class="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl overflow-x-auto max-w-full">
+            <button data-map-mode="explore" class="map-mode-btn active px-2.5 py-1 rounded-lg text-xs font-bold bg-white dark:bg-slate-700 text-sky-600 dark:text-sky-400 shadow-xs whitespace-nowrap">
+              وضع الاستكشاف
+            </button>
+            <button data-map-mode="mastery" class="map-mode-btn px-2.5 py-1 rounded-lg text-xs font-bold text-slate-600 dark:text-slate-300 whitespace-nowrap">
+              وضع الإتقان
+            </button>
+            <button data-map-mode="blank" class="map-mode-btn px-2.5 py-1 rounded-lg text-xs font-bold text-slate-600 dark:text-slate-300 whitespace-nowrap">
+              الخريطة الصماء
+            </button>
+            <button data-map-mode="quiz" class="map-mode-btn px-2.5 py-1 rounded-lg text-xs font-bold text-slate-600 dark:text-slate-300 whitespace-nowrap">
+              اختبار سريع
+            </button>
+          </div>
+
+          <!-- Status Filter & Isolate Toggle -->
+          <div class="flex items-center gap-2 flex-wrap">
+            <select id="map-status-filter" class="text-xs font-semibold bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 outline-none">
+              <option value="all">جميع الحالات (194)</option>
+              <option value="unstudied">لم تُدرس بعد</option>
+              <option value="studied">تمت دراستها (غير مختبرة)</option>
+              <option value="partial">قيد التعلم (1-2 من 3)</option>
+              <option value="review">تحتاج إلى مراجعة</option>
+              <option value="mastered">محفوظة بالكامل (3/3)</option>
+            </select>
+
+            <label class="inline-flex items-center gap-1.5 text-xs font-semibold cursor-pointer bg-slate-100 dark:bg-slate-800 px-2.5 py-1.5 rounded-xl select-none">
+              <input id="isolate-region-checkbox" type="checkbox" class="rounded text-sky-600 focus:ring-0" />
+              <span>عزل المنطقة المختارة</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Inline Quick Quiz Prompt Banner (Manual Next + Blue Highlight) -->
+        <div id="map-quiz-banner" class="hidden bg-blue-600 text-white px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 shadow-md z-20">
+          <div class="flex items-center gap-3">
+            <span class="bg-white/20 px-2.5 py-1 rounded-lg text-xs font-bold" id="map-quiz-progress">1 / 10</span>
+            <p class="text-sm sm:text-base font-bold">ما اسم الدولة المظللة بالأزرق على الخريطة؟</p>
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <div id="map-quiz-choices" class="flex items-center gap-1.5 flex-wrap"></div>
+            <span id="map-quiz-feedback" class="text-xs sm:text-sm font-bold px-2.5 py-1 rounded-lg hidden"></span>
+            <button id="map-quiz-next-btn" class="hidden px-3.5 py-1 rounded-lg bg-white text-blue-700 hover:bg-blue-50 text-xs font-extrabold">التالي ←</button>
+            <button id="map-quiz-stop-btn" class="px-3 py-1 rounded-lg bg-rose-500 hover:bg-rose-600 text-xs font-bold">إنهاء</button>
+          </div>
+        </div>
+
+        <!-- Vector Map Container -->
+        <div id="map-container" class="flex-1 relative bg-sky-50/70 dark:bg-slate-950 overflow-hidden min-h-[360px]">
+          <!-- Non-blocking Subtle Loading Badge -->
+          <div id="map-loading" class="absolute top-3 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-white/95 dark:bg-slate-900/95 border border-slate-200 dark:border-slate-700 px-3.5 py-1.5 rounded-full shadow-md z-20">
+            <div class="w-4 h-4 border-2 border-sky-500 border-t-transparent rounded-full animate-spin"></div>
+            <p class="text-xs font-bold text-slate-600 dark:text-slate-300">جاري تجهيز حدود الخريطة...</p>
+          </div>
+
+          <!-- D3 SVG Canvas -->
+          <svg id="world-map-svg"></svg>
+
+          <!-- Zoom & Reset Floating Controls -->
+          <div class="absolute bottom-4 left-4 flex flex-col gap-1.5 z-10">
+            <button id="zoom-in-btn" title="تكبير" class="w-10 h-10 rounded-xl bg-white/95 dark:bg-slate-800/95 shadow-md border border-slate-200 dark:border-slate-700 flex items-center justify-center text-lg font-bold hover:bg-slate-50 dark:hover:bg-slate-700 transition">+</button>
+            <button id="zoom-out-btn" title="تصغير" class="w-10 h-10 rounded-xl bg-white/95 dark:bg-slate-800/95 shadow-md border border-slate-200 dark:border-slate-700 flex items-center justify-center text-lg font-bold hover:bg-slate-50 dark:hover:bg-slate-700 transition">−</button>
+            <button id="zoom-reset-btn" title="إعادة ضبط الخريطة" class="w-10 h-10 rounded-xl bg-white/95 dark:bg-slate-800/95 shadow-md border border-slate-200 dark:border-slate-700 flex items-center justify-center hover:bg-slate-50 dark:hover:bg-slate-700 transition">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
+            </button>
+          </div>
+
+          <!-- Map Color Legend (Bottom Right) -->
+          <div class="absolute bottom-4 right-4 bg-white/95 dark:bg-slate-900/95 backdrop-blur p-2.5 rounded-2xl shadow-md border border-slate-200 dark:border-slate-800 text-[11px] space-y-1.5 z-10 max-w-[210px]">
+            <div class="font-bold text-slate-700 dark:text-slate-200 border-b border-slate-100 dark:border-slate-800 pb-1">دليل ألوان الإتقان</div>
+            <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-sm bg-slate-300 dark:bg-slate-700 shrink-0"></span><span>لم تُدرس بعد</span></div>
+            <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-sm bg-sky-400 shrink-0"></span><span>تمت دراستها (غير مختبرة)</span></div>
+            <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-sm bg-amber-400 shrink-0"></span><span>قيد التعلم (1-2 من 3)</span></div>
+            <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-sm bg-rose-500 shrink-0"></span><span>تحتاج إلى مراجعة</span></div>
+            <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-sm bg-emerald-500 shrink-0"></span><span>محفوظة بالكامل (3/3)</span></div>
+          </div>
+
+          <!-- Focused 4-Element Country Card (Explore Mode) -->
+          <div id="country-info-card" class="hidden absolute top-4 right-4 w-80 max-w-[calc(100vw-2rem)] bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 p-4 z-20 transition-all">
+            <div class="flex items-start justify-between gap-2 mb-3">
+              <div>
+                <span id="card-region-badge" class="inline-block text-[11px] font-bold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 mb-1">القارة • المنطقة</span>
+                <h2 id="card-country-name" class="text-xl font-extrabold text-slate-900 dark:text-white leading-tight">اسم الدولة</h2>
+              </div>
+              <button id="close-country-card-btn" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800">✕</button>
+            </div>
+
+            <!-- Flag Image -->
+            <div class="w-full h-36 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800/70 border border-slate-300/70 dark:border-slate-600/70 p-2 mb-3 flex items-center justify-center">
+              <img id="card-country-flag" src="" alt="علم الدولة" class="max-w-full max-h-full w-auto h-auto object-contain rounded-xs shadow-2xs" />
+            </div>
+
+            <!-- Capital Info -->
+            <div class="bg-slate-50 dark:bg-slate-800/80 rounded-xl p-3 mb-3 flex items-center justify-between">
+              <span class="text-xs font-bold text-slate-500 dark:text-slate-400">العاصمة:</span>
+              <span id="card-country-capital" class="text-base font-extrabold text-sky-700 dark:text-sky-400">---</span>
+            </div>
+
+            <!-- 3 Pillars Mastery Status -->
+            <div class="grid grid-cols-3 gap-1.5 mb-3 text-center text-[11px] font-bold">
+              <div id="pillar-location" class="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500">الموقع ✕</div>
+              <div id="pillar-capital" class="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500">العاصمة ✕</div>
+              <div id="pillar-flag" class="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500">العلم ✕</div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="flex items-center gap-2">
+              <button id="mark-studied-btn" class="flex-1 py-2 px-3 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold shadow-xs transition">
+                تمت دراستها
+              </button>
+              <button id="next-country-btn" class="py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-bold transition">
+                التالية ←
+              </button>
+              <button id="quiz-single-country-btn" title="اختبر هذه الدولة" class="p-2 rounded-xl bg-amber-100 hover:bg-amber-200 dark:bg-amber-950 dark:hover:bg-amber-900 text-amber-700 dark:text-amber-300 text-xs font-bold transition">
+                اختبرني
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW 2: FLEXIBLE EXAM ENGINE -->
+      <section id="view-exam" class="view-section hidden p-4 sm:p-6 max-w-5xl mx-auto w-full space-y-6">
+        
+        <!-- Exam Setup Screen -->
+        <div id="exam-config-panel" class="space-y-6">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 class="text-2xl font-extrabold text-slate-900 dark:text-white">مركز الامتحانات والاختبارات المرنة</h2>
+              <p class="text-sm text-slate-500 dark:text-slate-400">خصّص نطاق الامتحان، نوع الأسئلة، وعدد الدول بحرية تامة.</p>
+            </div>
+          </div>
+
+          <!-- Quick Special Challenges Grid -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <button data-preset="current-level" class="exam-preset-card text-right p-4 rounded-2xl bg-gradient-to-br from-indigo-500 to-sky-600 text-white shadow-md hover:opacity-95 transition">
+              <div class="text-xs font-bold opacity-85 mb-1">إتقان إلزامي (3 جوانب)</div>
+              <div class="text-base font-extrabold">امتحان المستوى الحالي</div>
+              <div class="text-[11px] opacity-90 mt-1">يختبر الموقع والعاصمة والعلم لكل دولة في مجموعتك</div>
+            </button>
+            <button data-preset="mistakes" class="exam-preset-card text-right p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-rose-400 shadow-xs transition">
+              <div class="text-xs font-bold text-rose-500 mb-1">تصحيح الأخطاء</div>
+              <div class="text-base font-extrabold">امتحان الأخطاء السابقة</div>
+              <div class="text-[11px] text-slate-500 mt-1">ركّز على الدول التي أخطأت فيها سابقاً</div>
+            </button>
+            <button data-preset="blank-map" class="exam-preset-card text-right p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-amber-400 shadow-xs transition">
+              <div class="text-xs font-bold text-amber-500 mb-1">تحدي الخريطة</div>
+              <div class="text-base font-extrabold">امتحان الخريطة الصماء</div>
+              <div class="text-[11px] text-slate-500 mt-1">تحديد مواقع الدول بدون أي أسماء أو تلميحات</div>
+            </button>
+            <button data-preset="world-random" class="exam-preset-card text-right p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-emerald-400 shadow-xs transition">
+              <div class="text-xs font-bold text-emerald-500 mb-1">شامل ومختلط</div>
+              <div class="text-base font-extrabold">تحدي العالم العشوائي</div>
+              <div class="text-[11px] text-slate-500 mt-1">مزيج عشوائي من دول العالم والجوانب الثلاثة</div>
+            </button>
+          </div>
+
+          <!-- Custom Exam Form -->
+          <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-xs space-y-5">
+            <h3 class="text-lg font-extrabold border-b border-slate-100 dark:border-slate-800 pb-3">إعداد امتحان مخصص</h3>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <!-- 1. Scope Selection -->
+              <div class="space-y-2">
+                <label class="block text-sm font-bold">1. نطاق الامتحان:</label>
+                <select id="exam-scope-select" class="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-semibold outline-none">
+                  <option value="world">العالم كله (194 دولة)</option>
+                  <option value="current_set">مجموعة التعلم الحالية</option>
+                  <option value="continent">قارة محددة</option>
+                  <option value="subregion">منطقة جغرافية محددة</option>
+                  <option value="unstudied">الدول التي لم أدرسها بعد</option>
+                  <option value="mistakes">الدول التي أخطأت فيها / تحتاج مراجعة</option>
+                  <option value="mastered">الدول المحفوظة سابقاً (للتثبيت)</option>
+                  <option value="mixed">امتحان مختلط (جديدة + قديمة + أخطاء)</option>
+                  <option value="custom_pick">دول أختارها بنفسي</option>
+                </select>
+
+                <!-- Dynamic Sub-selectors -->
+                <select id="exam-continent-select" class="hidden w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-semibold outline-none mt-2"></select>
+                <select id="exam-subregion-select" class="hidden w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-semibold outline-none mt-2"></select>
+                
+                <div id="exam-custom-pick-box" class="hidden mt-2 p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 space-y-2">
+                  <input id="exam-custom-search" type="text" placeholder="ابحث لإضافة دول..." class="w-full px-3 py-1.5 text-xs rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 outline-none" />
+                  <div id="exam-custom-list" class="max-h-36 overflow-y-auto grid grid-cols-2 gap-1 text-xs"></div>
+                </div>
+
+                <p class="text-xs font-bold text-sky-600 dark:text-sky-400">الدول المتاحة في هذا النطاق: <span id="exam-available-count">194</span> دولة</p>
+              </div>
+
+              <!-- 2. Question Count -->
+              <div class="space-y-2">
+                <label class="block text-sm font-bold">2. عدد الدول / الأسئلة:</label>
+                <div class="flex items-center gap-2">
+                  <input id="exam-count-input" type="number" min="1" max="194" value="10" class="w-28 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-extrabold text-center outline-none" />
+                  <div class="flex flex-wrap gap-1.5">
+                    <button type="button" data-count="5" class="exam-count-chip px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-sky-100 text-xs font-bold">5</button>
+                    <button type="button" data-count="10" class="exam-count-chip px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-sky-100 text-xs font-bold">10</button>
+                    <button type="button" data-count="20" class="exam-count-chip px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-sky-100 text-xs font-bold">20</button>
+                    <button type="button" data-count="50" class="exam-count-chip px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-sky-100 text-xs font-bold">50</button>
+                    <button type="button" data-count="all" class="exam-count-chip px-3 py-1.5 rounded-lg bg-sky-100 dark:bg-sky-900/60 text-sky-700 dark:text-sky-300 text-xs font-bold">الكل</button>
+                  </div>
+                </div>
+                <p id="exam-count-warning" class="hidden text-xs text-rose-500 font-bold"></p>
+              </div>
+
+              <!-- 3. Exam Type -->
+              <div class="space-y-2">
+                <label class="block text-sm font-bold">3. نوع الامتحان:</label>
+                <div class="grid grid-cols-2 gap-2 text-xs font-bold">
+                  <label class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800">
+                    <input type="radio" name="exam-type" value="comprehensive" checked class="text-sky-600" />
+                    <span>الامتحان الشامل (الموقع والعلم + العاصمة)</span>
+                  </label>
+                  <label class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800">
+                    <input type="radio" name="exam-type" value="mastery_3_pillars" class="text-sky-600" />
+                    <span>إتقان كامل (3 جوانب لكل دولة)</span>
+                  </label>
+                  <label class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800">
+                    <input type="radio" name="exam-type" value="location_and_flag" class="text-sky-600" />
+                    <span>اختبار تحديد الدولة والعلم</span>
+                  </label>
+                  <label class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800">
+                    <input type="radio" name="exam-type" value="capital" class="text-sky-600" />
+                    <span>اختبار العواصم فقط</span>
+                  </label>
+                  <label class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 col-span-2">
+                    <input type="radio" name="exam-type" value="flag" class="text-sky-600" />
+                    <span>اختبار الأعلام فقط</span>
+                  </label>
+                </div>
+              </div>
+
+              <!-- 4. Difficulty Level -->
+              <div class="space-y-2">
+                <label class="block text-sm font-bold">4. مستوى الصعوبة (اختياري):</label>
+                <div class="grid grid-cols-3 gap-2 text-xs font-bold">
+                  <label class="flex flex-col items-center justify-center p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 text-center">
+                    <input type="radio" name="exam-difficulty" value="easy" class="mb-1 text-sky-600" />
+                    <span>سهل</span>
+                    <span class="text-[10px] font-normal text-slate-400">مع تلميح القارة</span>
+                  </label>
+                  <label class="flex flex-col items-center justify-center p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 text-center">
+                    <input type="radio" name="exam-difficulty" value="medium" checked class="mb-1 text-sky-600" />
+                    <span>متوسط</span>
+                    <span class="text-[10px] font-normal text-slate-400">قياسي</span>
+                  </label>
+                  <label class="flex flex-col items-center justify-center p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 text-center">
+                    <input type="radio" name="exam-difficulty" value="hard" class="mb-1 text-sky-600" />
+                    <span>صعب</span>
+                    <span class="text-[10px] font-normal text-slate-400">خيارات متقاربة</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div class="pt-2">
+              <button id="start-exam-btn" class="w-full py-3.5 rounded-2xl bg-sky-600 hover:bg-sky-700 text-white font-extrabold text-base shadow-md transition">
+                ابدأ الامتحان الآن
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Active Exam Arena -->
+        <div id="exam-active-panel" class="hidden space-y-4">
+          <!-- Exam Header Bar -->
+          <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 flex flex-wrap items-center justify-between gap-3 shadow-xs">
+            <div class="flex items-center gap-3">
+              <span id="exam-q-counter" class="px-3 py-1 rounded-xl bg-sky-100 dark:bg-sky-900/60 text-sky-700 dark:text-sky-300 font-extrabold text-sm">سؤال 1 من 10</span>
+              <span id="exam-q-type-badge" class="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs font-bold">العاصمة</span>
+            </div>
+            <div class="flex items-center gap-4 text-sm font-bold">
+              <span class="text-emerald-600">صحيح: <span id="exam-live-correct">0</span></span>
+              <span class="text-rose-600">خطأ: <span id="exam-live-wrong">0</span></span>
+              <button id="abort-exam-btn" class="px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 text-xs font-bold">إنهاء الامتحان</button>
+            </div>
+          </div>
+
+          <!-- Progress Bar -->
+          <div class="w-full h-2 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+            <div id="exam-progress-bar" class="h-full bg-sky-500 transition-all duration-300" style="width: 0%"></div>
+          </div>
+
+          <!-- Question Card -->
+          <div id="exam-question-card" class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-7 shadow-sm space-y-5">
+            <!-- Top Feedback & Manual Next Button (Placed at TOP to avoid scrolling) -->
+            <div id="exam-feedback-bar" class="hidden p-3.5 sm:p-4 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3 sticky top-0 z-20 shadow-sm">
+              <div class="flex items-center gap-2.5">
+                <span id="exam-feedback-icon" class="text-xl font-extrabold"></span>
+                <p id="exam-feedback-text" class="text-sm font-bold"></p>
+              </div>
+              <button id="exam-next-q-btn" type="button" class="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-sm font-extrabold hover:opacity-90 transition shrink-0">
+                التالي ←
+              </button>
+            </div>
+
+            <!-- Post-Answer Target Country Card (Flag + Name + Capital shown after every answer) -->
+            <div id="exam-target-summary-card" class="hidden p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-3 max-w-3xl mx-auto">
+              <div class="flex items-center gap-3">
+                <div class="w-16 h-12 rounded-lg bg-slate-100 dark:bg-slate-800/70 border border-slate-300/70 dark:border-slate-600/70 p-1 flex items-center justify-center shrink-0">
+                  <img id="exam-summary-flag" src="" alt="علم الدولة" class="max-w-full max-h-full w-auto h-auto object-contain rounded-2xs" />
+                </div>
+                <div>
+                  <div class="text-[11px] font-bold text-slate-500 dark:text-slate-400">بيانات الدولة المستهدفة</div>
+                  <div id="exam-summary-name" class="text-base font-extrabold text-slate-900 dark:text-white">---</div>
+                </div>
+              </div>
+              <div class="text-left sm:text-right">
+                <span class="text-xs font-bold text-slate-500 dark:text-slate-400">العاصمة: </span>
+                <span id="exam-summary-capital" class="text-sm font-extrabold text-sky-700 dark:text-sky-400">---</span>
+              </div>
+            </div>
+
+            <div class="text-center space-y-2">
+              <p id="exam-prompt-label" class="text-sm font-bold text-slate-500 dark:text-slate-400">ما اسم هذه الدولة؟</p>
+              <h3 id="exam-prompt-main" class="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">---</h3>
+              <p id="exam-prompt-hint" class="hidden text-xs font-bold text-amber-600 dark:text-amber-400"></p>
+            </div>
+
+            <!-- Interactive Map Highlight Container (Blue Highlighted Country) -->
+            <div id="exam-map-question-box" class="hidden space-y-2">
+              <div id="exam-map-slot" class="w-full h-72 sm:h-88 rounded-2xl overflow-hidden border-2 border-blue-200 dark:border-blue-800 relative bg-sky-50 dark:bg-slate-950"></div>
+            </div>
+
+            <!-- Visual Prompt (Flag image if standalone flag->country question) -->
+            <div id="exam-flag-prompt-box" class="hidden flex justify-center">
+              <div class="h-36 sm:h-44 px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800/70 border border-slate-300/70 dark:border-slate-600/70 flex items-center justify-center">
+                <img id="exam-flag-prompt-img" src="" alt="علم" class="max-w-full max-h-full w-auto h-auto object-contain rounded-sm shadow-2xs" />
+              </div>
+            </div>
+
+            <!-- Standard Multiple Choice Options Grid -->
+            <div id="exam-options-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-2xl mx-auto">
+              <!-- Options rendered dynamically -->
+            </div>
+
+            <!-- Post-Answer Full Options Comparison Grid (Flag + Name + Capital for all 4 choices) -->
+            <div id="exam-comparison-box" class="hidden space-y-2.5 max-w-3xl mx-auto pt-2 border-t border-slate-100 dark:border-slate-800">
+              <h4 class="text-xs sm:text-sm font-extrabold text-slate-600 dark:text-slate-300">مقارنة جميع الخيارات (العلم • الدولة • العاصمة):</h4>
+              <div id="exam-comparison-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Exam Summary Results Screen -->
+        <div id="exam-results-panel" class="hidden bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-6">
+          <div class="text-center space-y-2">
+            <span class="inline-block px-3 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-xs font-bold">اكتمل الامتحان</span>
+            <h2 class="text-2xl sm:text-3xl font-extrabold">نتيجة الامتحان</h2>
+            <p class="text-4xl font-extrabold text-sky-600 dark:text-sky-400" id="res-score-pct">0%</p>
+          </div>
+
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+            <div class="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800/50">
+              <div class="text-xs font-bold text-emerald-700 dark:text-emerald-300">محفوظة بالكامل</div>
+              <div id="res-mastered-countries" class="text-2xl font-extrabold text-emerald-600 mt-1">0</div>
+            </div>
+            <div class="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800/50">
+              <div class="text-xs font-bold text-amber-700 dark:text-amber-300">تحتاج مراجعة</div>
+              <div id="res-review-countries" class="text-2xl font-extrabold text-amber-600 mt-1">0</div>
+            </div>
+            <div class="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800">
+              <div class="text-xs font-bold text-slate-500">إجابات صحيحة</div>
+              <div id="res-correct-ans" class="text-2xl font-extrabold text-slate-800 dark:text-white mt-1">0</div>
+            </div>
+            <div class="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800">
+              <div class="text-xs font-bold text-slate-500">إجابات خاطئة</div>
+              <div id="res-wrong-ans" class="text-2xl font-extrabold text-rose-600 mt-1">0</div>
+            </div>
+          </div>
+
+          <!-- Per-Aspect Mastery Breakdown -->
+          <div class="space-y-2.5 bg-slate-50 dark:bg-slate-800/60 p-4 rounded-2xl">
+            <h4 class="text-sm font-extrabold">مستوى الإتقان حسب الجانب في هذا الامتحان:</h4>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs font-bold">
+              <div class="p-3 rounded-xl bg-white dark:bg-slate-900 flex items-center justify-between">
+                <span>الموقع الجغرافي</span>
+                <span id="res-pillar-loc" class="text-sky-600 font-extrabold">-</span>
+              </div>
+              <div class="p-3 rounded-xl bg-white dark:bg-slate-900 flex items-center justify-between">
+                <span>العاصمة</span>
+                <span id="res-pillar-cap" class="text-sky-600 font-extrabold">-</span>
+              </div>
+              <div class="p-3 rounded-xl bg-white dark:bg-slate-900 flex items-center justify-between">
+                <span>العلم</span>
+                <span id="res-pillar-flg" class="text-sky-600 font-extrabold">-</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tested Countries Breakdown List -->
+          <div class="space-y-2">
+            <h4 class="text-sm font-extrabold">تفاصيل الدول المختبرة:</h4>
+            <div id="res-countries-list" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-60 overflow-y-auto"></div>
+          </div>
+
+          <div class="flex flex-wrap items-center justify-center gap-3 pt-2">
+            <button id="retry-same-exam-btn" class="px-6 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-sm font-bold transition">إعادة نفس الامتحان</button>
+            <button id="practice-exam-mistakes-btn" class="hidden px-6 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-sm font-bold transition">اختبر الأخطاء فقط</button>
+            <button id="back-to-exam-setup-btn" class="px-6 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-sm font-bold transition">امتحان جديد</button>
+            <button id="view-results-on-map-btn" class="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold transition">عرض على الخريطة</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW 3: SMART SPACED REPETITION & REVIEW -->
+      <section id="view-review" class="view-section hidden p-4 sm:p-6 max-w-5xl mx-auto w-full space-y-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2 class="text-2xl font-extrabold">نظام المراجعة الذكي (التكرار المتباعد)</h2>
+            <p class="text-sm text-slate-500 dark:text-slate-400">جدولة تلقائية للدول التي أخطأت فيها أو حان موعد مراجعتها (1، 3، 7، 14 يوماً) لمنع النسيان.</p>
+          </div>
+          <button id="start-due-review-exam-btn" class="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold shadow-xs transition">
+            ابدأ جلسة المراجعة المستحقة
+          </button>
+        </div>
+
+        <!-- 3 Review Buckets -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 space-y-3">
+            <div class="flex items-center justify-between">
+              <h3 class="font-extrabold text-rose-600">دول أخطأت فيها</h3>
+              <span id="rev-mistakes-count" class="px-2.5 py-0.5 rounded-full bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 text-xs font-bold">0</span>
+            </div>
+            <p class="text-xs text-slate-500">تحتاج إلى تركيز فوري لإتقان جميع جوانبها.</p>
+            <div id="rev-mistakes-list" class="space-y-1.5 max-h-64 overflow-y-auto"></div>
+          </div>
+
+          <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 space-y-3">
+            <div class="flex items-center justify-between">
+              <h3 class="font-extrabold text-amber-600">إتقان غير مكتمل (1-2/3)</h3>
+              <span id="rev-partial-count" class="px-2.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 text-xs font-bold">0</span>
+            </div>
+            <p class="text-xs text-slate-500">أتقنت جزءاً من معلوماتها وبقي جزء لم يُختبر أو يُحفظ.</p>
+            <div id="rev-partial-list" class="space-y-1.5 max-h-64 overflow-y-auto"></div>
+          </div>
+
+          <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 space-y-3">
+            <div class="flex items-center justify-between">
+              <h3 class="font-extrabold text-sky-600">مراجعة متباعدة مستحقة</h3>
+              <span id="rev-spaced-count" class="px-2.5 py-0.5 rounded-full bg-sky-100 dark:bg-sky-950 text-sky-700 dark:text-sky-300 text-xs font-bold">0</span>
+            </div>
+            <p class="text-xs text-slate-500">دول حفظتها سابقاً وحان موعد تذكرها اليوم.</p>
+            <div id="rev-spaced-list" class="space-y-1.5 max-h-64 overflow-y-auto"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW 4: STATISTICS & DATA BACKUP -->
+      <section id="view-stats" class="view-section hidden p-4 sm:p-6 max-w-5xl mx-auto w-full space-y-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2 class="text-2xl font-extrabold">الإحصائيات ولوحة التقدم</h2>
+            <p class="text-sm text-slate-500 dark:text-slate-400">متابعة دقيقة لمستوى إتقانك لدول العالم الـ195 والجوانب الثلاثة.</p>
+          </div>
+          <!-- JSON Export / Import -->
+          <div class="flex items-center gap-2">
+            <button id="export-data-btn" class="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-bold transition">
+              تصدير التقدم (JSON)
+            </button>
+            <label class="px-3.5 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold cursor-pointer transition">
+              استيراد بيانات
+              <input id="import-data-input" type="file" accept=".json" class="hidden" />
+            </label>
+          </div>
+        </div>
+
+        <!-- Top KPI Cards -->
+        <div class="grid grid-cols-2 lg:grid-cols-5 gap-3">
+          <div class="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800">
+            <div class="text-xs font-bold text-slate-500">محفوظة بالكامل</div>
+            <div class="text-2xl font-extrabold text-emerald-600 mt-1"><span id="stat-mastered">0</span> <span class="text-xs text-slate-400">/ 194</span></div>
+          </div>
+          <div class="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800">
+            <div class="text-xs font-bold text-slate-500">تمت دراستها</div>
+            <div class="text-2xl font-extrabold text-sky-600 mt-1" id="stat-studied">0</div>
+          </div>
+          <div class="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800">
+            <div class="text-xs font-bold text-slate-500">تحتاج مراجعة</div>
+            <div class="text-2xl font-extrabold text-rose-600 mt-1" id="stat-needs-review">0</div>
+          </div>
+          <div class="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800">
+            <div class="text-xs font-bold text-slate-500">نسبة إتقان العالم</div>
+            <div class="text-2xl font-extrabold text-indigo-600 mt-1" id="stat-world-pct">0%</div>
+          </div>
+          <div class="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 col-span-2 lg:col-span-1">
+            <div class="text-xs font-bold text-slate-500">الامتحانات / المتوسط</div>
+            <div class="text-2xl font-extrabold text-amber-600 mt-1"><span id="stat-exams-count">0</span> <span class="text-sm text-slate-400">(<span id="stat-exams-avg">0%</span>)</span></div>
+          </div>
+        </div>
+
+        <!-- 3 Aspects Mastery Bars + Continent Mastery -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-4">
+            <h3 class="font-extrabold text-base">إتقان الجوانب الثلاثة (من 194 دولة)</h3>
+            <div class="space-y-3 text-xs font-bold">
+              <div>
+                <div class="flex justify-between mb-1"><span>المواقع الجغرافية</span><span id="stat-loc-pct">0 / 194 (0%)</span></div>
+                <div class="w-full h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden"><div id="stat-loc-bar" class="h-full bg-sky-500 transition-all" style="width:0%"></div></div>
+              </div>
+              <div>
+                <div class="flex justify-between mb-1"><span>العواصم</span><span id="stat-cap-pct">0 / 194 (0%)</span></div>
+                <div class="w-full h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden"><div id="stat-cap-bar" class="h-full bg-indigo-500 transition-all" style="width:0%"></div></div>
+              </div>
+              <div>
+                <div class="flex justify-between mb-1"><span>الأعلام</span><span id="stat-flg-pct">0 / 194 (0%)</span></div>
+                <div class="w-full h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden"><div id="stat-flg-bar" class="h-full bg-emerald-500 transition-all" style="width:0%"></div></div>
+              </div>
+            </div>
+
+            <!-- Exam History Chart (Simple SVG Bar Chart) -->
+            <div class="pt-3 border-t border-slate-100 dark:border-slate-800">
+              <h4 class="text-xs font-extrabold mb-2 text-slate-500">تطور نتائج آخر الامتحانات:</h4>
+              <div id="exam-history-chart" class="h-28 flex items-end gap-2 pt-4 px-2 bg-slate-50 dark:bg-slate-800/50 rounded-xl"></div>
+            </div>
+          </div>
+
+          <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-3">
+            <h3 class="font-extrabold text-base">نسبة الإتقان حسب القارة</h3>
+            <div id="stat-continents-bars" class="space-y-3 text-xs font-bold"></div>
+          </div>
+        </div>
+
+        <!-- Top Mistaken Countries & Reset Option -->
+        <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div class="space-y-1">
+            <h3 class="font-extrabold text-base">أكثر الدول التي تحتاج إلى تركيز</h3>
+            <div id="stat-top-mistakes" class="flex flex-wrap gap-1.5 pt-1 text-xs"></div>
+          </div>
+          <button id="reset-all-progress-btn" class="px-4 py-2 rounded-xl border border-rose-200 dark:border-rose-900 text-rose-600 text-xs font-bold hover:bg-rose-50 dark:hover:bg-rose-950/50 transition shrink-0">
+            إعادة ضبط التقدم بالكامل
+          </button>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Modal: Custom Study Batch / Suggested Path Creator -->
+  <div id="study-modal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 max-w-lg w-full p-5 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+        <h3 id="study-modal-title" class="text-lg font-extrabold">إنشاء مجموعة تعلّم مخصصة</h3>
+        <button id="close-study-modal-btn" class="text-slate-400 hover:text-slate-700 font-bold">✕</button>
+      </div>
+
+      <div id="study-modal-body" class="space-y-4">
+        <!-- Quick Batch Generator -->
+        <div class="space-y-2">
+          <label class="text-xs font-bold text-slate-500">اختر عدداً محدداً من الدول غير المحفوظة للدراسة الآن:</label>
+          <div class="flex flex-wrap gap-2">
+            <button data-batch-size="5" class="quick-batch-btn px-3.5 py-2 rounded-xl bg-sky-50 hover:bg-sky-100 dark:bg-sky-950 text-sky-700 dark:text-sky-300 text-xs font-bold">5 دول عشوائية</button>
+            <button data-batch-size="10" class="quick-batch-btn px-3.5 py-2 rounded-xl bg-sky-50 hover:bg-sky-100 dark:bg-sky-950 text-sky-700 dark:text-sky-300 text-xs font-bold">10 دول عشوائية</button>
+            <button data-batch-size="15" class="quick-batch-btn px-3.5 py-2 rounded-xl bg-sky-50 hover:bg-sky-100 dark:bg-sky-950 text-sky-700 dark:text-sky-300 text-xs font-bold">15 دولة عشوائية</button>
+          </div>
+        </div>
+
+        <!-- Multi-country selector across any continents -->
+        <div class="space-y-2">
+          <label class="text-xs font-bold text-slate-500">أو اختر دولاً محددة بنفسك من أي قارة:</label>
+          <input id="modal-country-search" type="text" placeholder="ابحث بالاسم أو العاصمة..." class="w-full px-3 py-2 text-xs rounded-xl bg-slate-100 dark:bg-slate-800 outline-none" />
+          <div id="modal-countries-checklist" class="max-h-52 overflow-y-auto border border-slate-200 dark:border-slate-800 rounded-xl p-2 grid grid-cols-2 gap-1.5 text-xs"></div>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+        <button id="cancel-study-modal-btn" class="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold">إلغاء</button>
+        <button id="apply-custom-study-btn" class="px-5 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold">بدء دراسة المجموعة (<span id="selected-custom-count">0</span>)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Non-blocking Toast Notification -->
+  <div id="toast-box" class="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 hidden bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-4 py-2.5 rounded-xl shadow-lg text-xs sm:text-sm font-bold transition-all"></div>
+
+  <!-- ===================================================================== -->
+  <!-- MODULE 1: COMPLETE 194-COUNTRY DATASET (192 UN + PALESTINE + VATICAN) -->
+  <!-- ===================================================================== -->
+  <script>
+    /**
+     * Complete, verified dataset of 194 sovereign states:
+     * 192 UN Member States + State of Palestine (PSE, unified across historic Palestine) + Vatican City (VAT).
+     */
+    const COUNTRIES_DATA = [
+      // ==================== 1. آسيا (47 دولة) ====================
+      // الشرق الأوسط (15 دولة في آسيا - مصر مصنفة في شمال أفريقيا)
+      { id: "682", iso2: "sa", name: "السعودية", capital: "الرياض", continent: "آسيا", subregion: "الشرق الأوسط", coords: [45.08, 23.89], isMicrostate: false },
+      { id: "784", iso2: "ae", name: "الإمارات العربية المتحدة", capital: "أبوظبي", continent: "آسيا", subregion: "الشرق الأوسط", coords: [53.85, 23.42], isMicrostate: false },
+      { id: "414", iso2: "kw", name: "الكويت", capital: "مدينة الكويت", continent: "آسيا", subregion: "الشرق الأوسط", coords: [47.48, 29.31], isMicrostate: true },
+      { id: "634", iso2: "qa", name: "قطر", capital: "الدوحة", continent: "آسيا", subregion: "الشرق الأوسط", coords: [51.18, 25.35], isMicrostate: true },
+      { id: "048", iso2: "bh", name: "البحرين", capital: "المنامة", continent: "آسيا", subregion: "الشرق الأوسط", coords: [50.55, 26.07], isMicrostate: true },
+      { id: "512", iso2: "om", name: "عُمان", capital: "مسقط", continent: "آسيا", subregion: "الشرق الأوسط", coords: [55.92, 21.51], isMicrostate: false },
+      { id: "887", iso2: "ye", name: "اليمن", capital: "صنعاء", continent: "آسيا", subregion: "الشرق الأوسط", coords: [48.52, 15.55], isMicrostate: false },
+      { id: "368", iso2: "iq", name: "العراق", capital: "بغداد", continent: "آسيا", subregion: "الشرق الأوسط", coords: [43.68, 33.22], isMicrostate: false },
+      { id: "760", iso2: "sy", name: "سوريا", capital: "دمشق", continent: "آسيا", subregion: "الشرق الأوسط", coords: [38.99, 34.80], isMicrostate: false },
+      { id: "422", iso2: "lb", name: "لبنان", capital: "بيروت", continent: "آسيا", subregion: "الشرق الأوسط", coords: [35.86, 33.85], isMicrostate: true },
+      { id: "400", iso2: "jo", name: "الأردن", capital: "عمّان", continent: "آسيا", subregion: "الشرق الأوسط", coords: [36.24, 30.59], isMicrostate: false },
+      { id: "275", iso2: "ps", name: "فلسطين", capital: "القدس", continent: "آسيا", subregion: "الشرق الأوسط", coords: [35.21, 31.77], isMicrostate: false },
+      { id: "792", iso2: "tr", name: "تركيا", capital: "أنقرة", continent: "آسيا", subregion: "الشرق الأوسط", coords: [35.24, 38.96], isMicrostate: false },
+      { id: "364", iso2: "ir", name: "إيران", capital: "طهران", continent: "آسيا", subregion: "الشرق الأوسط", coords: [53.69, 32.43], isMicrostate: false },
+      { id: "196", iso2: "cy", name: "قبرص", capital: "نيقوسيا", continent: "آسيا", subregion: "الشرق الأوسط", coords: [33.43, 35.13], isMicrostate: true },
+
+      // آسيا الوسطى والقوقاز (8 دول)
+      { id: "398", iso2: "kz", name: "كازاخستان", capital: "أستانا", continent: "آسيا", subregion: "آسيا الوسطى", coords: [66.92, 48.02], isMicrostate: false },
+      { id: "860", iso2: "uz", name: "أوزبكستان", capital: "طشقند", continent: "آسيا", subregion: "آسيا الوسطى", coords: [64.59, 41.38], isMicrostate: false },
+      { id: "795", iso2: "tm", name: "تركمانستان", capital: "عشق آباد", continent: "آسيا", subregion: "آسيا الوسطى", coords: [59.56, 38.97], isMicrostate: false },
+      { id: "417", iso2: "kg", name: "قيرغيزستان", capital: "بشكيك", continent: "آسيا", subregion: "آسيا الوسطى", coords: [74.77, 41.20], isMicrostate: false },
+      { id: "762", iso2: "tj", name: "طاجيكستان", capital: "دوشنبه", continent: "آسيا", subregion: "آسيا الوسطى", coords: [71.28, 38.86], isMicrostate: false },
+      { id: "268", iso2: "ge", name: "جورجيا", capital: "تبليسي", continent: "آسيا", subregion: "آسيا الوسطى", coords: [43.36, 42.32], isMicrostate: false },
+      { id: "051", iso2: "am", name: "أرمينيا", capital: "يريفان", continent: "آسيا", subregion: "آسيا الوسطى", coords: [45.04, 40.07], isMicrostate: true },
+      { id: "031", iso2: "az", name: "أذربيجان", capital: "باكو", continent: "آسيا", subregion: "آسيا الوسطى", coords: [47.58, 40.14], isMicrostate: false },
+
+      // جنوب آسيا (8 دول)
+      { id: "356", iso2: "in", name: "الهند", capital: "نيودلهي", continent: "آسيا", subregion: "جنوب آسيا", coords: [78.96, 20.59], isMicrostate: false },
+      { id: "586", iso2: "pk", name: "باكستان", capital: "إسلام آباد", continent: "آسيا", subregion: "جنوب آسيا", coords: [69.35, 30.38], isMicrostate: false },
+      { id: "050", iso2: "bd", name: "بنغلاديش", capital: "دكا", continent: "آسيا", subregion: "جنوب آسيا", coords: [90.36, 23.68], isMicrostate: false },
+      { id: "004", iso2: "af", name: "أفغانستان", capital: "كابل", continent: "آسيا", subregion: "جنوب آسيا", coords: [67.71, 33.94], isMicrostate: false },
+      { id: "524", iso2: "np", name: "نيبال", capital: "كاتماندو", continent: "آسيا", subregion: "جنوب آسيا", coords: [84.12, 28.39], isMicrostate: false },
+      { id: "064", iso2: "bt", name: "بوتان", capital: "تيمفو", continent: "آسيا", subregion: "جنوب آسيا", coords: [90.43, 27.51], isMicrostate: true },
+      { id: "144", iso2: "lk", name: "سريلانكا", capital: "سري جاياواردنابورا كوتي", continent: "آسيا", subregion: "جنوب آسيا", coords: [80.77, 7.87], isMicrostate: false },
+      { id: "462", iso2: "mv", name: "المالديف", capital: "ماليه", continent: "آسيا", subregion: "جنوب آسيا", coords: [73.22, 3.20], isMicrostate: true },
+
+      // شرق آسيا (5 دول)
+      { id: "156", iso2: "cn", name: "الصين", capital: "بكين", continent: "آسيا", subregion: "شرق آسيا", coords: [104.20, 35.86], isMicrostate: false },
+      { id: "392", iso2: "jp", name: "اليابان", capital: "طوكيو", continent: "آسيا", subregion: "شرق آسيا", coords: [138.25, 36.20], isMicrostate: false },
+      { id: "410", iso2: "kr", name: "كوريا الجنوبية", capital: "سيول", continent: "آسيا", subregion: "شرق آسيا", coords: [127.77, 35.91], isMicrostate: false },
+      { id: "408", iso2: "kp", name: "كوريا الشمالية", capital: "بيونغ يانغ", continent: "آسيا", subregion: "شرق آسيا", coords: [127.51, 40.34], isMicrostate: false },
+      { id: "496", iso2: "mn", name: "منغوليا", capital: "أولان باتور", continent: "آسيا", subregion: "شرق آسيا", coords: [103.85, 46.86], isMicrostate: false },
+
+      // جنوب شرق آسيا (11 دولة)
+      { id: "360", iso2: "id", name: "إندونيسيا", capital: "جاكرتا", continent: "آسيا", subregion: "جنوب شرق آسيا", coords: [113.92, -0.79], isMicrostate: false },
+      { id: "458", iso2: "my", name: "ماليزيا", capital: "كوالالمبور", continent: "آسيا", subregion: "جنوب شرق آسيا", coords: [101.98, 4.21], isMicrostate: false },
+      { id: "702", iso2: "sg", name: "سنغافورة", capital: "سنغافورة", continent: "آسيا", subregion: "جنوب شرق آسيا", coords: [103.82, 1.35], isMicrostate: true },
+      { id: "764", iso2: "th", name: "تايلاند", capital: "بانكوك", continent: "آسيا", subregion: "جنوب شرق آسيا", coords: [100.99, 15.87], isMicrostate: false },
+      { id: "704", iso2: "vn", name: "فيتنام", capital: "هانوي", continent: "آسيا", subregion: "جنوب شرق آسيا", coords: [108.28, 14.06], isMicrostate: false },
+      { id: "608", iso2: "ph", name: "الفلبين", capital: "مانيلا", continent: "آسيا", subregion: "جنوب شرق آسيا", coords: [121.77, 12.88], isMicrostate: false },
+      { id: "104", iso2: "mm", name: "ميانمار", capital: "نايبيداو", continent: "آسيا", subregion: "جنوب شرق آسيا", coords: [95.96, 21.91], isMicrostate: false },
+      { id: "116", iso2: "kh", name: "كمبوديا", capital: "بنوم بنه", continent: "آسيا", subregion: "جنوب شرق آسيا", coords: [104.99, 12.57], isMicrostate: false },
+      { id: "418", iso2: "la", name: "لاوس", capital: "فيينتيان", continent: "آسيا", subregion: "جنوب شرق آسيا", coords: [102.50, 19.86], isMicrostate: false },
+      { id: "096", iso2: "bn", name: "بروناي", capital: "بندر سري بكاوان", continent: "آسيا", subregion: "جنوب شرق آسيا", coords: [114.73, 4.54], isMicrostate: true },
+      { id: "626", iso2: "tl", name: "تيمور الشرقية", capital: "ديلي", continent: "آسيا", subregion: "جنوب شرق آسيا", coords: [125.73, -8.87], isMicrostate: true },
+
+      // ==================== 2. أفريقيا (54 دولة) ====================
+      // شمال أفريقيا (6 دول)
+      { id: "818", iso2: "eg", name: "مصر", capital: "القاهرة", continent: "أفريقيا", subregion: "شمال أفريقيا", coords: [30.80, 26.82], isMicrostate: false },
+      { id: "434", iso2: "ly", name: "ليبيا", capital: "طرابلس", continent: "أفريقيا", subregion: "شمال أفريقيا", coords: [17.23, 26.34], isMicrostate: false },
+      { id: "788", iso2: "tn", name: "تونس", capital: "تونس", continent: "أفريقيا", subregion: "شمال أفريقيا", coords: [9.54, 33.89], isMicrostate: false },
+      { id: "012", iso2: "dz", name: "الجزائر", capital: "الجزائر", continent: "أفريقيا", subregion: "شمال أفريقيا", coords: [1.66, 28.03], isMicrostate: false },
+      { id: "504", iso2: "ma", name: "المغرب", capital: "الرباط", continent: "أفريقيا", subregion: "شمال أفريقيا", coords: [-7.09, 31.79], isMicrostate: false },
+      { id: "729", iso2: "sd", name: "السودان", capital: "الخرطوم", continent: "أفريقيا", subregion: "شمال أفريقيا", coords: [30.22, 12.86], isMicrostate: false },
+
+      // غرب أفريقيا (16 دولة)
+      { id: "478", iso2: "mr", name: "موريتانيا", capital: "نواكشوط", continent: "أفريقيا", subregion: "غرب أفريقيا", coords: [-10.94, 21.01], isMicrostate: false },
+      { id: "466", iso2: "ml", name: "مالي", capital: "باماكو", continent: "أفريقيا", subregion: "غرب أفريقيا", coords: [-4.00, 17.57], isMicrostate: false },
+      { id: "562", iso2: "ne", name: "النيجر", capital: "نيامي", continent: "أفريقيا", subregion: "غرب أفريقيا", coords: [8.08, 17.61], isMicrostate: false },
+      { id: "566", iso2: "ng", name: "نيجيريا", capital: "أبوجا", continent: "أفريقيا", subregion: "غرب أفريقيا", coords: [8.68, 9.08], isMicrostate: false },
+      { id: "686", iso2: "sn", name: "السنغال", capital: "داكار", continent: "أفريقيا", subregion: "غرب أفريقيا", coords: [-14.45, 14.50], isMicrostate: false },
+      { id: "270", iso2: "gm", name: "غامبيا", capital: "بانجول", continent: "أفريقيا", subregion: "غرب أفريقيا", coords: [-15.31, 13.44], isMicrostate: true },
+      { id: "624", iso2: "gw", name: "غينيا بيساو", capital: "بيساو", continent: "أفريقيا", subregion: "غرب أفريقيا", coords: [-15.18, 11.80], isMicrostate: true },
+      { id: "324", iso2: "gn", name: "غينيا", capital: "كوناكري", continent: "أفريقيا", subregion: "غرب أفريقيا", coords: [-9.70, 9.95], isMicrostate: false },
+      { id: "694", iso2: "sl", name: "سيراليون", capital: "فريتاون", continent: "أفريقيا", subregion: "غرب أفريقيا", coords: [-11.78, 8.46], isMicrostate: false },
+      { id: "430", iso2: "lr", name: "ليبيريا", capital: "مونروفيا", continent: "أفريقيا", subregion: "غرب أفريقيا", coords: [-9.43, 6.43], isMicrostate: false },
+      { id: "384", iso2: "ci", name: "ساحل العاج", capital: "ياموسوكرو", continent: "أفريقيا", subregion: "غرب أفريقيا", coords: [-5.55, 7.54], isMicrostate: false },
+      { id: "854", iso2: "bf", name: "بوركينا فاسو", capital: "واغادوغو", continent: "أفريقيا", subregion: "غرب أفريقيا", coords: [-1.56, 12.24], isMicrostate: false },
+      { id: "288", iso2: "gh", name: "غانا", capital: "أكرا", continent: "أفريقيا", subregion: "غرب أفريقيا", coords: [-1.02, 7.95], isMicrostate: false },
+      { id: "768", iso2: "tg", name: "توغو", capital: "لومي", continent: "أفريقيا", subregion: "غرب أفريقيا", coords: [0.82, 8.62], isMicrostate: true },
+      { id: "204", iso2: "bj", name: "بنين", capital: "بورتو نوفو", continent: "أفريقيا", subregion: "غرب أفريقيا", coords: [2.32, 9.31], isMicrostate: false },
+      { id: "132", iso2: "cv", name: "الرأس الأخضر", capital: "برايا", continent: "أفريقيا", subregion: "غرب أفريقيا", coords: [-23.61, 15.12], isMicrostate: true },
+
+      // شرق أفريقيا (18 دولة)
+      { id: "231", iso2: "et", name: "إثيوبيا", capital: "أديس أبابا", continent: "أفريقيا", subregion: "شرق أفريقيا", coords: [40.49, 9.15], isMicrostate: false },
+      { id: "232", iso2: "er", name: "إريتريا", capital: "أسمرة", continent: "أفريقيا", subregion: "شرق أفريقيا", coords: [39.78, 15.18], isMicrostate: false },
+      { id: "262", iso2: "dj", name: "جيبوتي", capital: "جيبوتي", continent: "أفريقيا", subregion: "شرق أفريقيا", coords: [42.59, 11.83], isMicrostate: true },
+      { id: "706", iso2: "so", name: "الصومال", capital: "مقديشو", continent: "أفريقيا", subregion: "شرق أفريقيا", coords: [46.20, 5.15], isMicrostate: false },
+      { id: "728", iso2: "ss", name: "جنوب السودان", capital: "جوبا", continent: "أفريقيا", subregion: "شرق أفريقيا", coords: [31.31, 6.88], isMicrostate: false },
+      { id: "404", iso2: "ke", name: "كينيا", capital: "نيروبي", continent: "أفريقيا", subregion: "شرق أفريقيا", coords: [37.91, -0.02], isMicrostate: false },
+      { id: "800", iso2: "ug", name: "أوغندا", capital: "كمبالا", continent: "أفريقيا", subregion: "شرق أفريقيا", coords: [32.29, 1.37], isMicrostate: false },
+      { id: "834", iso2: "tz", name: "تنزانيا", capital: "دودوما", continent: "أفريقيا", subregion: "شرق أفريقيا", coords: [34.89, -6.37], isMicrostate: false },
+      { id: "646", iso2: "rw", name: "رواندا", capital: "كيغالي", continent: "أفريقيا", subregion: "شرق أفريقيا", coords: [29.87, -1.94], isMicrostate: true },
+      { id: "108", iso2: "bi", name: "بوروندي", capital: "غيتيغا", continent: "أفريقيا", subregion: "شرق أفريقيا", coords: [29.92, -3.37], isMicrostate: true },
+      { id: "454", iso2: "mw", name: "ملاوي", capital: "ليلونغوي", continent: "أفريقيا", subregion: "شرق أفريقيا", coords: [34.30, -13.25], isMicrostate: false },
+      { id: "894", iso2: "zm", name: "زامبيا", capital: "لوساكا", continent: "أفريقيا", subregion: "شرق أفريقيا", coords: [27.85, -13.13], isMicrostate: false },
+      { id: "716", iso2: "zw", name: "زيمبابوي", capital: "هراري", continent: "أفريقيا", subregion: "شرق أفريقيا", coords: [29.15, -19.02], isMicrostate: false },
+      { id: "508", iso2: "mz", name: "موزمبيق", capital: "مابوتو", continent: "أفريقيا", subregion: "شرق أفريقيا", coords: [35.53, -18.67], isMicrostate: false },
+      { id: "450", iso2: "mg", name: "مدغشقر", capital: "أنتاناناريفو", continent: "أفريقيا", subregion: "شرق أفريقيا", coords: [46.87, -18.77], isMicrostate: false },
+      { id: "174", iso2: "km", name: "جزر القمر", capital: "موروني", continent: "أفريقيا", subregion: "شرق أفريقيا", coords: [43.87, -11.88], isMicrostate: true },
+      { id: "480", iso2: "mu", name: "موريشيوس", capital: "بورت لويس", continent: "أفريقيا", subregion: "شرق أفريقيا", coords: [57.55, -20.35], isMicrostate: true },
+      { id: "690", iso2: "sc", name: "سيشل", capital: "فيكتوريا", continent: "أفريقيا", subregion: "شرق أفريقيا", coords: [55.49, -4.68], isMicrostate: true },
+
+      // وسط أفريقيا (9 دول)
+      { id: "148", iso2: "td", name: "تشاد", capital: "نجامينا", continent: "أفريقيا", subregion: "وسط أفريقيا", coords: [18.73, 15.45], isMicrostate: false },
+      { id: "140", iso2: "cf", name: "جمهورية أفريقيا الوسطى", capital: "بانغي", continent: "أفريقيا", subregion: "وسط أفريقيا", coords: [20.94, 6.61], isMicrostate: false },
+      { id: "120", iso2: "cm", name: "الكاميرون", capital: "ياوندي", continent: "أفريقيا", subregion: "وسط أفريقيا", coords: [12.35, 7.37], isMicrostate: false },
+      { id: "226", iso2: "gq", name: "غينيا الاستوائية", capital: "مالابو", continent: "أفريقيا", subregion: "وسط أفريقيا", coords: [10.27, 1.65], isMicrostate: true },
+      { id: "266", iso2: "ga", name: "الغابون", capital: "ليبرفيل", continent: "أفريقيا", subregion: "وسط أفريقيا", coords: [11.61, -0.80], isMicrostate: false },
+      { id: "178", iso2: "cg", name: "جمهورية الكونغو", capital: "برازافيل", continent: "أفريقيا", subregion: "وسط أفريقيا", coords: [15.83, -0.23], isMicrostate: false },
+      { id: "180", iso2: "cd", name: "جمهورية الكونغو الديمقراطية", capital: "كينشاسا", continent: "أفريقيا", subregion: "وسط أفريقيا", coords: [21.76, -4.04], isMicrostate: false },
+      { id: "024", iso2: "ao", name: "أنغولا", capital: "لواندا", continent: "أفريقيا", subregion: "وسط أفريقيا", coords: [17.87, -11.20], isMicrostate: false },
+      { id: "678", iso2: "st", name: "ساو تومي وبرينسيب", capital: "ساو تومي", continent: "أفريقيا", subregion: "وسط أفريقيا", coords: [6.61, 0.19], isMicrostate: true },
+
+      // جنوب أفريقيا (5 دول)
+      { id: "710", iso2: "za", name: "جنوب أفريقيا", capital: "بريتوريا", continent: "أفريقيا", subregion: "جنوب أفريقيا", coords: [22.94, -30.56], isMicrostate: false },
+      { id: "516", iso2: "na", name: "ناميبيا", capital: "ويندهوك", continent: "أفريقيا", subregion: "جنوب أفريقيا", coords: [18.49, -22.96], isMicrostate: false },
+      { id: "072", iso2: "bw", name: "بوتسوانا", capital: "غابورون", continent: "أفريقيا", subregion: "جنوب أفريقيا", coords: [24.68, -22.33], isMicrostate: false },
+      { id: "426", iso2: "ls", name: "ليسوتو", capital: "ماسيرو", continent: "أفريقيا", subregion: "جنوب أفريقيا", coords: [28.23, -29.61], isMicrostate: true },
+      { id: "748", iso2: "sz", name: "إسواتيني", capital: "مبابان", continent: "أفريقيا", subregion: "جنوب أفريقيا", coords: [31.47, -26.52], isMicrostate: true },
+
+      // ==================== 3. أوروبا (44 دولة) ====================
+      // أوروبا الغربية (9 دول)
+      { id: "250", iso2: "fr", name: "فرنسا", capital: "باريس", continent: "أوروبا", subregion: "أوروبا الغربية", coords: [2.21, 46.23], isMicrostate: false },
+      { id: "276", iso2: "de", name: "ألمانيا", capital: "برلين", continent: "أوروبا", subregion: "أوروبا الغربية", coords: [10.45, 51.17], isMicrostate: false },
+      { id: "528", iso2: "nl", name: "هولندا", capital: "أمستردام", continent: "أوروبا", subregion: "أوروبا الغربية", coords: [5.29, 52.13], isMicrostate: false },
+      { id: "056", iso2: "be", name: "بلجيكا", capital: "بروكسل", continent: "أوروبا", subregion: "أوروبا الغربية", coords: [4.47, 50.50], isMicrostate: false },
+      { id: "442", iso2: "lu", name: "لوكسمبورغ", capital: "لوكسمبورغ", continent: "أوروبا", subregion: "أوروبا الغربية", coords: [6.13, 49.82], isMicrostate: true },
+      { id: "756", iso2: "ch", name: "سويسرا", capital: "برن", continent: "أوروبا", subregion: "أوروبا الغربية", coords: [8.23, 46.82], isMicrostate: false },
+      { id: "040", iso2: "at", name: "النمسا", capital: "فيينا", continent: "أوروبا", subregion: "أوروبا الغربية", coords: [14.55, 47.52], isMicrostate: false },
+      { id: "438", iso2: "li", name: "ليختنشتاين", capital: "فادوتس", continent: "أوروبا", subregion: "أوروبا الغربية", coords: [9.56, 47.17], isMicrostate: true },
+      { id: "492", iso2: "mc", name: "موناكو", capital: "موناكو", continent: "أوروبا", subregion: "أوروبا الغربية", coords: [7.42, 43.74], isMicrostate: true },
+
+      // أوروبا الشمالية (10 دول)
+      { id: "826", iso2: "gb", name: "المملكة المتحدة", capital: "لندن", continent: "أوروبا", subregion: "أوروبا الشمالية", coords: [-3.44, 55.38], isMicrostate: false },
+      { id: "372", iso2: "ie", name: "أيرلندا", capital: "دبلن", continent: "أوروبا", subregion: "أوروبا الشمالية", coords: [-8.24, 53.41], isMicrostate: false },
+      { id: "352", iso2: "is", name: "آيسلندا", capital: "ريكيافيك", continent: "أوروبا", subregion: "أوروبا الشمالية", coords: [-19.02, 64.96], isMicrostate: false },
+      { id: "578", iso2: "no", name: "النرويج", capital: "أوسلو", continent: "أوروبا", subregion: "أوروبا الشمالية", coords: [8.47, 60.47], isMicrostate: false },
+      { id: "752", iso2: "se", name: "السويد", capital: "ستوكهولم", continent: "أوروبا", subregion: "أوروبا الشمالية", coords: [18.64, 60.13], isMicrostate: false },
+      { id: "246", iso2: "fi", name: "فنلندا", capital: "هلسنكي", continent: "أوروبا", subregion: "أوروبا الشمالية", coords: [25.75, 61.92], isMicrostate: false },
+      { id: "208", iso2: "dk", name: "الدنمارك", capital: "كوبنهاغن", continent: "أوروبا", subregion: "أوروبا الشمالية", coords: [9.50, 56.26], isMicrostate: false },
+      { id: "233", iso2: "ee", name: "إستونيا", capital: "تالين", continent: "أوروبا", subregion: "أوروبا الشمالية", coords: [25.01, 58.60], isMicrostate: false },
+      { id: "428", iso2: "lv", name: "لاتفيا", capital: "ريغا", continent: "أوروبا", subregion: "أوروبا الشمالية", coords: [24.60, 56.88], isMicrostate: false },
+      { id: "440", iso2: "lt", name: "ليتوانيا", capital: "فيلنيوس", continent: "أوروبا", subregion: "أوروبا الشمالية", coords: [23.88, 55.17], isMicrostate: false },
+
+      // أوروبا الجنوبية (15 دولة)
+      { id: "724", iso2: "es", name: "إسبانيا", capital: "مدريد", continent: "أوروبا", subregion: "أوروبا الجنوبية", coords: [-3.75, 40.46], isMicrostate: false },
+      { id: "620", iso2: "pt", name: "البرتغال", capital: "لشبونة", continent: "أوروبا", subregion: "أوروبا الجنوبية", coords: [-8.22, 39.40], isMicrostate: false },
+      { id: "020", iso2: "ad", name: "أندورا", capital: "أندورا لا فيلا", continent: "أوروبا", subregion: "أوروبا الجنوبية", coords: [1.52, 42.51], isMicrostate: true },
+      { id: "380", iso2: "it", name: "إيطاليا", capital: "روما", continent: "أوروبا", subregion: "أوروبا الجنوبية", coords: [12.57, 41.87], isMicrostate: false },
+      { id: "674", iso2: "sm", name: "سان مارينو", capital: "سان مارينو", continent: "أوروبا", subregion: "أوروبا الجنوبية", coords: [12.46, 43.94], isMicrostate: true },
+      { id: "336", iso2: "va", name: "الفاتيكان", capital: "مدينة الفاتيكان", continent: "أوروبا", subregion: "أوروبا الجنوبية", coords: [12.45, 41.90], isMicrostate: true },
+      { id: "470", iso2: "mt", name: "مالطا", capital: "فاليتا", continent: "أوروبا", subregion: "أوروبا الجنوبية", coords: [14.38, 35.94], isMicrostate: true },
+      { id: "300", iso2: "gr", name: "اليونان", capital: "أثينا", continent: "أوروبا", subregion: "أوروبا الجنوبية", coords: [21.82, 39.07], isMicrostate: false },
+      { id: "705", iso2: "si", name: "سلوفينيا", capital: "ليوبليانا", continent: "أوروبا", subregion: "أوروبا الجنوبية", coords: [14.99, 46.15], isMicrostate: false },
+      { id: "191", iso2: "hr", name: "كرواتيا", capital: "زغرب", continent: "أوروبا", subregion: "أوروبا الجنوبية", coords: [15.20, 45.10], isMicrostate: false },
+      { id: "070", iso2: "ba", name: "البوسنة والهرسك", capital: "سراييفو", continent: "أوروبا", subregion: "أوروبا الجنوبية", coords: [17.68, 43.92], isMicrostate: false },
+      { id: "688", iso2: "rs", name: "صربيا", capital: "بلغراد", continent: "أوروبا", subregion: "أوروبا الجنوبية", coords: [21.01, 44.02], isMicrostate: false },
+      { id: "499", iso2: "me", name: "الجبل الأسود", capital: "بودغوريتسا", continent: "أوروبا", subregion: "أوروبا الجنوبية", coords: [19.37, 42.71], isMicrostate: true },
+      { id: "807", iso2: "mk", name: "مقدونيا الشمالية", capital: "إسكوبية", continent: "أوروبا", subregion: "أوروبا الجنوبية", coords: [21.75, 41.61], isMicrostate: false },
+      { id: "008", iso2: "al", name: "ألبانيا", capital: "تيرانا", continent: "أوروبا", subregion: "أوروبا الجنوبية", coords: [20.17, 41.15], isMicrostate: false },
+
+      // أوروبا الشرقية (10 دول)
+      { id: "643", iso2: "ru", name: "روسيا", capital: "موسكو", continent: "أوروبا", subregion: "أوروبا الشرقية", coords: [92.00, 62.00], isMicrostate: false },
+      { id: "804", iso2: "ua", name: "أوكرانيا", capital: "كييف", continent: "أوروبا", subregion: "أوروبا الشرقية", coords: [31.17, 48.38], isMicrostate: false },
+      { id: "112", iso2: "by", name: "بيلاروسيا", capital: "مينسك", continent: "أوروبا", subregion: "أوروبا الشرقية", coords: [27.95, 53.71], isMicrostate: false },
+      { id: "616", iso2: "pl", name: "بولندا", capital: "وارسو", continent: "أوروبا", subregion: "أوروبا الشرقية", coords: [19.15, 51.92], isMicrostate: false },
+      { id: "203", iso2: "cz", name: "التشيك", capital: "براغ", continent: "أوروبا", subregion: "أوروبا الشرقية", coords: [15.47, 49.82], isMicrostate: false },
+      { id: "703", iso2: "sk", name: "سلوفاكيا", capital: "براتيسلافا", continent: "أوروبا", subregion: "أوروبا الشرقية", coords: [19.70, 48.67], isMicrostate: false },
+      { id: "348", iso2: "hu", name: "المجر", capital: "بودابست", continent: "أوروبا", subregion: "أوروبا الشرقية", coords: [19.50, 47.16], isMicrostate: false },
+      { id: "642", iso2: "ro", name: "رومانيا", capital: "بوخارست", continent: "أوروبا", subregion: "أوروبا الشرقية", coords: [24.97, 45.94], isMicrostate: false },
+      { id: "498", iso2: "md", name: "مولدوفا", capital: "كيشيناو", continent: "أوروبا", subregion: "أوروبا الشرقية", coords: [28.37, 47.41], isMicrostate: false },
+      { id: "100", iso2: "bg", name: "بلغاريا", capital: "صوفيا", continent: "أوروبا", subregion: "أوروبا الشرقية", coords: [25.49, 42.73], isMicrostate: false },
+
+      // ==================== 4. أمريكا الشمالية (23 دولة) ====================
+      // أمريكا الشمالية (3 دول)
+      { id: "124", iso2: "ca", name: "كندا", capital: "أوتاوا", continent: "أمريكا الشمالية", subregion: "أمريكا الشمالية", coords: [-106.35, 56.13], isMicrostate: false },
+      { id: "840", iso2: "us", name: "الولايات المتحدة", capital: "واشنطن", continent: "أمريكا الشمالية", subregion: "أمريكا الشمالية", coords: [-95.71, 37.09], isMicrostate: false },
+      { id: "484", iso2: "mx", name: "المكسيك", capital: "مكسيكو سيتي", continent: "أمريكا الشمالية", subregion: "أمريكا الشمالية", coords: [-102.55, 23.63], isMicrostate: false },
+
+      // أمريكا الوسطى (7 دول)
+      { id: "320", iso2: "gt", name: "غواتيمالا", capital: "غواتيمالا", continent: "أمريكا الشمالية", subregion: "أمريكا الوسطى", coords: [-90.23, 15.78], isMicrostate: false },
+      { id: "084", iso2: "bz", name: "بليز", capital: "بلموبان", continent: "أمريكا الشمالية", subregion: "أمريكا الوسطى", coords: [-88.50, 17.19], isMicrostate: true },
+      { id: "340", iso2: "hn", name: "هندوراس", capital: "تيغوسيغالبا", continent: "أمريكا الشمالية", subregion: "أمريكا الوسطى", coords: [-86.24, 15.20], isMicrostate: false },
+      { id: "222", iso2: "sv", name: "السلفادور", capital: "سان سلفادور", continent: "أمريكا الشمالية", subregion: "أمريكا الوسطى", coords: [-88.90, 13.79], isMicrostate: true },
+      { id: "558", iso2: "ni", name: "نيكاراغوا", capital: "ماناغوا", continent: "أمريكا الشمالية", subregion: "أمريكا الوسطى", coords: [-85.21, 12.87], isMicrostate: false },
+      { id: "188", iso2: "cr", name: "كوستاريكا", capital: "سان خوسيه", continent: "أمريكا الشمالية", subregion: "أمريكا الوسطى", coords: [-83.75, 9.75], isMicrostate: false },
+      { id: "591", iso2: "pa", name: "بنما", capital: "بنما", continent: "أمريكا الشمالية", subregion: "أمريكا الوسطى", coords: [-80.78, 8.54], isMicrostate: false },
+
+      // الكاريبي (13 دولة)
+      { id: "192", iso2: "cu", name: "كوبا", capital: "هافانا", continent: "أمريكا الشمالية", subregion: "الكاريبي", coords: [-77.78, 21.52], isMicrostate: false },
+      { id: "388", iso2: "jm", name: "جامايكا", capital: "كينغستون", continent: "أمريكا الشمالية", subregion: "الكاريبي", coords: [-77.30, 18.11], isMicrostate: true },
+      { id: "332", iso2: "ht", name: "هايتي", capital: "بورت أو برانس", continent: "أمريكا الشمالية", subregion: "الكاريبي", coords: [-72.29, 18.97], isMicrostate: false },
+      { id: "214", iso2: "do", name: "جمهورية الدومينيكان", capital: "سانتو دومينغو", continent: "أمريكا الشمالية", subregion: "الكاريبي", coords: [-70.16, 18.74], isMicrostate: false },
+      { id: "044", iso2: "bs", name: "باهاماس", capital: "ناساو", continent: "أمريكا الشمالية", subregion: "الكاريبي", coords: [-77.40, 25.03], isMicrostate: true },
+      { id: "659", iso2: "kn", name: "سانت كيتس ونيفيس", capital: "باستير", continent: "أمريكا الشمالية", subregion: "الكاريبي", coords: [-62.78, 17.36], isMicrostate: true },
+      { id: "028", iso2: "ag", name: "أنتيغوا وباربودا", capital: "سانت جونز", continent: "أمريكا الشمالية", subregion: "الكاريبي", coords: [-61.80, 17.06], isMicrostate: true },
+      { id: "212", iso2: "dm", name: "دومينيكا", capital: "روسو", continent: "أمريكا الشمالية", subregion: "الكاريبي", coords: [-61.37, 15.41], isMicrostate: true },
+      { id: "662", iso2: "lc", name: "سانت لوسيا", capital: "كاستريس", continent: "أمريكا الشمالية", subregion: "الكاريبي", coords: [-60.98, 13.91], isMicrostate: true },
+      { id: "670", iso2: "vc", name: "سانت فينسنت والغرينادين", capital: "كينغستاون", continent: "أمريكا الشمالية", subregion: "الكاريبي", coords: [-61.29, 12.98], isMicrostate: true },
+      { id: "052", iso2: "bb", name: "باربادوس", capital: "بريدجتاون", continent: "أمريكا الشمالية", subregion: "الكاريبي", coords: [-59.54, 13.19], isMicrostate: true },
+      { id: "308", iso2: "gd", name: "غرينادا", capital: "سانت جورجز", continent: "أمريكا الشمالية", subregion: "الكاريبي", coords: [-61.68, 12.12], isMicrostate: true },
+      { id: "780", iso2: "tt", name: "ترينيداد وتوباغو", capital: "بورت أوف سبين", continent: "أمريكا الشمالية", subregion: "الكاريبي", coords: [-61.22, 10.69], isMicrostate: true },
+
+      // ==================== 5. أمريكا الجنوبية (12 دولة) ====================
+      // شمال أمريكا الجنوبية (4 دول)
+      { id: "170", iso2: "co", name: "كولومبيا", capital: "بوغوتا", continent: "أمريكا الجنوبية", subregion: "شمال أمريكا الجنوبية", coords: [-74.30, 4.57], isMicrostate: false },
+      { id: "862", iso2: "ve", name: "فنزويلا", capital: "كاراكاس", continent: "أمريكا الجنوبية", subregion: "شمال أمريكا الجنوبية", coords: [-66.59, 6.42], isMicrostate: false },
+      { id: "328", iso2: "gy", name: "غيانا", capital: "جورج تاون", continent: "أمريكا الجنوبية", subregion: "شمال أمريكا الجنوبية", coords: [-58.93, 4.86], isMicrostate: false },
+      { id: "740", iso2: "sr", name: "سورينام", capital: "باراماريبو", continent: "أمريكا الجنوبية", subregion: "شمال أمريكا الجنوبية", coords: [-56.03, 3.92], isMicrostate: false },
+
+      // غرب أمريكا الجنوبية (3 دول)
+      { id: "218", iso2: "ec", name: "الإكوادور", capital: "كيتو", continent: "أمريكا الجنوبية", subregion: "غرب أمريكا الجنوبية", coords: [-78.18, -1.83], isMicrostate: false },
+      { id: "604", iso2: "pe", name: "بيرو", capital: "ليما", continent: "أمريكا الجنوبية", subregion: "غرب أمريكا الجنوبية", coords: [-75.02, -9.19], isMicrostate: false },
+      { id: "068", iso2: "bo", name: "بوليفيا", capital: "سوكري", continent: "أمريكا الجنوبية", subregion: "غرب أمريكا الجنوبية", coords: [-63.59, -16.29], isMicrostate: false },
+
+      // شرق ووسط أمريكا الجنوبية (2 دول)
+      { id: "076", iso2: "br", name: "البرازيل", capital: "برازيليا", continent: "أمريكا الجنوبية", subregion: "شرق ووسط أمريكا الجنوبية", coords: [-51.93, -14.24], isMicrostate: false },
+      { id: "600", iso2: "py", name: "باراغواي", capital: "أسونسيون", continent: "أمريكا الجنوبية", subregion: "شرق ووسط أمريكا الجنوبية", coords: [-58.44, -23.44], isMicrostate: false },
+
+      // المخروط الجنوبي (3 دول)
+      { id: "152", iso2: "cl", name: "تشيلي", capital: "سانتياغو", continent: "أمريكا الجنوبية", subregion: "المخروط الجنوبي", coords: [-71.54, -35.68], isMicrostate: false },
+      { id: "032", iso2: "ar", name: "الأرجنتين", capital: "بوينس آيرس", continent: "أمريكا الجنوبية", subregion: "المخروط الجنوبي", coords: [-63.62, -38.42], isMicrostate: false },
+      { id: "858", iso2: "uy", name: "أوروغواي", capital: "مونتيفيديو", continent: "أمريكا الجنوبية", subregion: "المخروط الجنوبي", coords: [-55.77, -32.52], isMicrostate: false },
+
+      // ==================== 6. أوقيانوسيا (14 دولة) ====================
+      // أستراليا ونيوزيلندا (2 دول)
+      { id: "036", iso2: "au", name: "أستراليا", capital: "كانبرا", continent: "أوقيانوسيا", subregion: "أستراليا ونيوزيلندا", coords: [133.78, -25.27], isMicrostate: false },
+      { id: "554", iso2: "nz", name: "نيوزيلندا", capital: "ويلينغتون", continent: "أوقيانوسيا", subregion: "أستراليا ونيوزيلندا", coords: [174.89, -40.90], isMicrostate: false },
+
+      // ميلانيزيا (4 دول)
+      { id: "598", iso2: "pg", name: "بابوا غينيا الجديدة", capital: "بورت مورسبي", continent: "أوقيانوسيا", subregion: "ميلانيزيا", coords: [143.96, -6.31], isMicrostate: false },
+      { id: "242", iso2: "fj", name: "فيجي", capital: "سوفا", continent: "أوقيانوسيا", subregion: "ميلانيزيا", coords: [178.07, -17.71], isMicrostate: true },
+      { id: "090", iso2: "sb", name: "جزر سليمان", capital: "هونيارا", continent: "أوقيانوسيا", subregion: "ميلانيزيا", coords: [160.16, -9.65], isMicrostate: true },
+      { id: "548", iso2: "vu", name: "فانواتو", capital: "بورت فيلا", continent: "أوقيانوسيا", subregion: "ميلانيزيا", coords: [166.96, -15.38], isMicrostate: true },
+
+      // ميكرونيزيا (5 دول)
+      { id: "583", iso2: "fm", name: "ولايات ميكرونيسيا المتحدة", capital: "باليكير", continent: "أوقيانوسيا", subregion: "ميكرونيزيا", coords: [158.16, 6.89], isMicrostate: true },
+      { id: "584", iso2: "mh", name: "جزر مارشال", capital: "ماجورو", continent: "أوقيانوسيا", subregion: "ميكرونيزيا", coords: [171.18, 7.13], isMicrostate: true },
+      { id: "585", iso2: "pw", name: "بالاو", capital: "نغيرولمود", continent: "أوقيانوسيا", subregion: "ميكرونيزيا", coords: [134.58, 7.51], isMicrostate: true },
+      { id: "520", iso2: "nr", name: "ناورو", capital: "يارين", continent: "أوقيانوسيا", subregion: "ميكرونيزيا", coords: [166.93, -0.52], isMicrostate: true },
+      { id: "296", iso2: "ki", name: "كيريباتي", capital: "تاراوا", continent: "أوقيانوسيا", subregion: "ميكرونيزيا", coords: [173.00, 1.45], isMicrostate: true },
+
+      // بولينيزيا (3 دول)
+      { id: "882", iso2: "ws", name: "ساموا", capital: "أبيا", continent: "أوقيانوسيا", subregion: "بولينيزيا", coords: [-172.10, -13.76], isMicrostate: true },
+      { id: "776", iso2: "to", name: "تونغا", capital: "نوكو ألوفا", continent: "أوقيانوسيا", subregion: "بولينيزيا", coords: [-175.20, -21.18], isMicrostate: true },
+      { id: "798", iso2: "tv", name: "توفالو", capital: "فونافوتي", continent: "أوقيانوسيا", subregion: "بولينيزيا", coords: [179.20, -8.52], isMicrostate: true }
+    ];
+
+    // Fast lookup maps & validation
+    const COUNTRY_BY_ID = new Map();
+    COUNTRIES_DATA.forEach(c => {
+      if (COUNTRY_BY_ID.has(c.id)) {
+        console.warn("Duplicate ID detected:", c.id, c.name);
+      }
+      COUNTRY_BY_ID.set(c.id, c);
+    });
+
+    // Normalize TopoJSON polygon IDs: map historic Palestine (376 + 275) unified to Palestine ("275")
+    function normalizeFeatureCountryId(rawId) {
+      const padded = String(rawId).padStart(3, "0");
+      if (padded === "376") return "275";
+      return padded;
+    }
+
+    // Structured Continent -> Subregions Hierarchy
+    const CONTINENT_STRUCTURE = [
+      { name: "آسيا", subregions: ["الشرق الأوسط", "آسيا الوسطى", "جنوب آسيا", "شرق آسيا", "جنوب شرق آسيا"] },
+      { name: "أفريقيا", subregions: ["شمال أفريقيا", "غرب أفريقيا", "شرق أفريقيا", "وسط أفريقيا", "جنوب أفريقيا"] },
+      { name: "أوروبا", subregions: ["أوروبا الغربية", "أوروبا الشمالية", "أوروبا الجنوبية", "أوروبا الشرقية"] },
+      { name: "أمريكا الشمالية", subregions: ["أمريكا الشمالية", "أمريكا الوسطى", "الكاريبي"] },
+      { name: "أمريكا الجنوبية", subregions: ["شمال أمريكا الجنوبية", "غرب أمريكا الجنوبية", "شرق ووسط أمريكا الجنوبية", "المخروط الجنوبي"] },
+      { name: "أوقيانوسيا", subregions: ["أستراليا ونيوزيلندا", "ميلانيزيا", "ميكرونيزيا", "بولينيزيا"] }
+    ];
+
+    // Helper for FlagCDN URL with fallback
+    function getFlagUrl(iso2) {
+      return `https://flagcdn.com/w320/${iso2.toLowerCase()}.png`;
+    }
+  </script>
+
+  <!-- ===================================================================== -->
+  <!-- MODULE 2: STATE, MASTERY ENGINE, SPACED REPETITION & LOCALSTORAGE     -->
+  <!-- ===================================================================== -->
+  <script>
+    const STORAGE_KEY = "arabic_world_atlas_progress_v1";
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const SR_INTERVALS = [1, 3, 7, 14]; // Spaced repetition days
+
+    // Default Application State
+    let appState = {
+      theme: "light",
+      progress: {}, // { [countryId]: { studied: bool, location: bool, capital: bool, flag: bool, mistakes: number, srLevel: number, nextReview: number|null, lastReviewed: number|null } }
+      examHistory: [], // [{ date, type, scope, scorePct, correct, total }]
+      studySet: [], // Array of country IDs in active study group
+      studySetIndex: 0
+    };
+
+    function loadState() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          appState = { ...appState, ...parsed };
+        }
+      } catch (e) {
+        console.error("Failed to load state:", e);
+      }
+      applyTheme(appState.theme);
+    }
+
+    function saveState() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
+      } catch (e) {
+        console.error("Failed to save state:", e);
+      }
+    }
+
+    function applyTheme(theme) {
+      appState.theme = theme;
+      if (theme === "dark") {
+        document.documentElement.classList.add("dark");
+      } else {
+        document.documentElement.classList.remove("dark");
+      }
+    }
+
+    function getCountryProgress(id) {
+      if (!appState.progress[id]) {
+        appState.progress[id] = {
+          studied: false,
+          location: false,
+          capital: false,
+          flag: false,
+          mistakes: 0,
+          needsReviewFlag: false,
+          srLevel: 0,
+          nextReview: null,
+          lastReviewed: null
+        };
+      }
+      return appState.progress[id];
+    }
+
+    // Determine overall status of a country:
+    // 'unstudied' | 'studied' | 'partial' | 'review' | 'mastered'
+    function getCountryStatus(id) {
+      const p = getCountryProgress(id);
+      const pillarsCount = (p.location ? 1 : 0) + (p.capital ? 1 : 0) + (p.flag ? 1 : 0);
+      if (pillarsCount === 3 && !p.needsReviewFlag) return "mastered";
+      if (p.needsReviewFlag) return "review";
+      if (pillarsCount > 0) return "partial";
+      if (p.studied) return "studied";
+      return "unstudied";
+    }
+
+    // Update mastery after a quiz answer (never erases previously mastered pillars)
+    function recordAnswerResult(countryId, aspect, isCorrect) {
+      const p = getCountryProgress(countryId);
+      p.studied = true;
+      p.lastReviewed = Date.now();
+
+      if (isCorrect) {
+        p[aspect] = true;
+        const allThree = p.location && p.capital && p.flag;
+        if (allThree) {
+          p.needsReviewFlag = false;
+          const intervalDays = SR_INTERVALS[Math.min(p.srLevel, SR_INTERVALS.length - 1)];
+          p.nextReview = Date.now() + intervalDays * DAY_MS;
+          p.srLevel = Math.min(p.srLevel + 1, SR_INTERVALS.length - 1);
+        }
+      } else {
+        p.mistakes = (p.mistakes || 0) + 1;
+        p.needsReviewFlag = true;
+        p.srLevel = 0;
+        p.nextReview = Date.now() + 0.5 * DAY_MS; // Schedule soon
+      }
+      saveState();
+      refreshAllUI();
+    }
+
+    function markCountryStudied(countryId) {
+      const p = getCountryProgress(countryId);
+      p.studied = true;
+      saveState();
+      refreshAllUI();
+    }
+
+    function showToast(msg) {
+      const el = document.getElementById("toast-box");
+      el.textContent = msg;
+      el.classList.remove("hidden");
+      clearTimeout(el._timer);
+      el._timer = setTimeout(() => el.classList.add("hidden"), 2800);
+    }
+  </script>
+
+  <!-- ===================================================================== -->
+  <!-- MODULE 3: INTERACTIVE D3 + TOPOJSON VECTOR MAP ENGINE                 -->
+  <!-- ===================================================================== -->
+  <script>
+    let mapSvg = null;
+    let mapG = null;
+    let mapProjection = null;
+    let mapPath = null;
+    let mapZoom = null;
+    let worldFeatures = [];
+    let worldMeshGeometry = null;
+    let currentZoomK = 1;
+    let currentMapMode = "explore";
+    let currentFilterStatus = "all";
+    let focusedRegionFilter = null;
+    let selectedCountryId = null;
+    let inlineMapQuiz = { active: false, queue: [], index: 0, locked: false };
+
+    function sanitizeAntimeridianRing(ring) {
+      if (!Array.isArray(ring) || ring.length < 2) return [ring];
+      const segments = [];
+      let current = [ring[0]];
+      for (let i = 1; i < ring.length; i++) {
+        const prev = ring[i - 1];
+        const curr = ring[i];
+        if (Math.abs(curr[0] - prev[0]) > 180) {
+          if (current.length > 2) segments.push(current);
+          current = [curr];
+        } else {
+          current.push(curr);
+        }
+      }
+      if (current.length > 2) segments.push(current);
+      return segments.length ? segments : [ring];
+    }
+
+    function sanitizeAntimeridianGeometry(feature) {
+      if (!feature || !feature.geometry) return feature;
+      const geom = feature.geometry;
+      if (geom.type === "Polygon") {
+        const cleanRings = [];
+        geom.coordinates.forEach(ring => {
+          sanitizeAntimeridianRing(ring).forEach(seg => cleanRings.push(seg));
+        });
+        return { ...feature, geometry: { ...geom, coordinates: cleanRings } };
+      }
+      if (geom.type === "MultiPolygon") {
+        const cleanPolys = [];
+        geom.coordinates.forEach(poly => {
+          const cleanRings = [];
+          poly.forEach(ring => {
+            sanitizeAntimeridianRing(ring).forEach(seg => cleanRings.push(seg));
+          });
+          if (cleanRings.length) cleanPolys.push(cleanRings);
+        });
+        return { ...feature, geometry: { ...geom, coordinates: cleanPolys } };
+      }
+      return feature;
+    }
+
+    function buildInlineFallbackFeatures() {
+      // Generates immediate circular/hexagonal land approximations around every country's real coordinates
+      // so the vector map renders instantaneously in <20ms even before or without external TopoJSON network access.
+      return COUNTRIES_DATA.filter(c => !c.isMicrostate).map(c => {
+        const [lon, lat] = c.coords;
+        const rLon = c.id === "643" ? 28 : (["124", "840", "156", "076", "036"].includes(c.id) ? 12 : 3.2);
+        const rLat = c.id === "643" ? 8 : (["124", "840", "156", "076", "036"].includes(c.id) ? 7 : 2.4);
+        const pts = [];
+        for (let a = 0; a < 12; a++) {
+          const rad = (a / 12) * Math.PI * 2;
+          const pLon = Math.max(-179.5, Math.min(179.5, lon + Math.cos(rad) * rLon));
+          const pLat = Math.max(-84, Math.min(84, lat + Math.sin(rad) * rLat));
+          pts.push([pLon, pLat]);
+        }
+        pts.push(pts[0]);
+        return {
+          type: "Feature",
+          id: c.id,
+          geometry: { type: "Polygon", coordinates: [pts] }
+        };
+      });
+    }
+
+    async function fetchWithTimeout(url, ms = 2500) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), ms);
+      try {
+        const res = await fetch(url, { signal: controller.signal });
+        clearTimeout(timer);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return await res.json();
+      } catch (err) {
+        clearTimeout(timer);
+        throw err;
+      }
+    }
+
+    async function initWorldMap() {
+      const container = document.getElementById("map-container");
+      const width = container.clientWidth || 960;
+      const height = container.clientHeight || 540;
+
+      if (typeof d3 === "undefined" || typeof topojson === "undefined") {
+        document.getElementById("map-loading").innerHTML = `<span class="text-rose-600 text-xs font-bold">تعذر تحميل مكتبة الرسم، أعد تحديث الصفحة.</span>`;
+        return;
+      }
+
+      mapSvg = d3.select("#world-map-svg")
+        .attr("viewBox", `0 0 ${width} ${height}`)
+        .attr("preserveAspectRatio", "xMidYMid meet");
+
+      mapG = mapSvg.append("g").attr("id", "map-layers");
+
+      mapProjection = d3.geoNaturalEarth1()
+        .rotate([0, 0])
+        .scale(width / 5.4)
+        .translate([width / 2, height / 1.9]);
+
+      mapPath = d3.geoPath().projection(mapProjection);
+
+      mapZoom = d3.zoom()
+        .scaleExtent([1, 18])
+        .on("zoom", (event) => {
+          currentZoomK = event.transform.k;
+          mapG.attr("transform", event.transform);
+          updateMapLabelVisibility();
+          updateMicrostateMarkerSizes();
+        });
+
+      mapSvg.call(mapZoom);
+
+      // Render immediate inline vector polygons + all 194 country coordinates in <20ms
+      worldFeatures = buildInlineFallbackFeatures();
+      renderMapLayers();
+      const loadingBadge = document.getElementById("map-loading");
+      if (loadingBadge) loadingBadge.classList.add("hidden");
+
+      // Upgrade asynchronously to high-resolution world-atlas TopoJSON boundaries when available
+      const topoUrls = [
+        "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json",
+        "https://unpkg.com/world-atlas@2.0.2/countries-110m.json"
+      ];
+
+      for (const url of topoUrls) {
+        try {
+          const topoData = await fetchWithTimeout(url, 2500);
+          if (topoData && topoData.objects && topoData.objects.countries) {
+            const geojson = topojson.feature(topoData, topoData.objects.countries);
+            worldFeatures = geojson.features
+              .filter(f => String(f.id).padStart(3, "0") !== "010")
+              .map(f => sanitizeAntimeridianGeometry(f));
+            const rawMesh = topojson.mesh(topoData, topoData.objects.countries, (a, b) => {
+              const idA = normalizeFeatureCountryId(a.id);
+              const idB = normalizeFeatureCountryId(b.id);
+              return idA !== idB && idA !== "010" && idB !== "010";
+            });
+            worldMeshGeometry = sanitizeAntimeridianGeometry({ type: "Feature", geometry: rawMesh }).geometry;
+            renderMapLayers();
+            break;
+          }
+        } catch (e) {
+          // Keep instant inline vector map if offline/sandboxed
+        }
+      }
+    }
+
+    function getFillColorForCountry(countryId) {
+      const isDark = appState.theme === "dark";
+      const status = getCountryStatus(countryId);
+
+      // In blank mode, keep uniform neutral tone unless explicitly highlighted
+      if (currentMapMode === "blank") {
+        return isDark ? "#1e293b" : "#e2e8f0";
+      }
+
+      switch (status) {
+        case "mastered":
+          return "#10b981"; // Emerald-500
+        case "review":
+          return "#f43f5e"; // Rose-500
+        case "partial":
+          return "#fbbf24"; // Amber-400
+        case "studied":
+          return "#38bdf8"; // Sky-400
+        default:
+          return isDark ? "#1e293b" : "#e2e8f0";
+      }
+    }
+
+    function renderMapLayers() {
+      if (!mapG) return;
+      mapG.selectAll("*").remove();
+
+      // 1. Country Polygons Layer (Palestine unified across 275 & 376)
+      const polygonsGroup = mapG.append("g").attr("class", "polygons-layer");
+      polygonsGroup.selectAll("path")
+        .data(worldFeatures)
+        .enter()
+        .append("path")
+        .attr("d", mapPath)
+        .attr("class", "country-path")
+        .attr("data-id", d => normalizeFeatureCountryId(d.id))
+        .attr("fill", d => {
+          const cid = normalizeFeatureCountryId(d.id);
+          return COUNTRY_BY_ID.has(cid) ? getFillColorForCountry(cid) : (appState.theme === "dark" ? "#1e293b" : "#e2e8f0");
+        })
+        .on("click", (event, d) => {
+          event.stopPropagation();
+          const cid = normalizeFeatureCountryId(d.id);
+          if (COUNTRY_BY_ID.has(cid)) {
+            handleMapCountryClick(cid);
+          }
+        });
+
+      // 1b. Internal Shared Borders Mesh Layer (ensures crisp internal borders even when highlighted)
+      if (worldMeshGeometry) {
+        mapG.append("path")
+          .datum(worldMeshGeometry)
+          .attr("d", mapPath)
+          .attr("class", "country-mesh-layer");
+      }
+
+      // 2. Microstates & Small Islands Proportional Geographic Dots Layer (on the map itself)
+      const microstates = COUNTRIES_DATA.filter(c => c.isMicrostate);
+      const markersGroup = mapG.append("g").attr("class", "microstates-layer");
+
+      markersGroup.selectAll("circle.microstate-marker")
+        .data(microstates)
+        .enter()
+        .append("circle")
+        .attr("class", "microstate-marker")
+        .attr("data-id", d => d.id)
+        .attr("cx", d => mapProjection(d.coords)[0])
+        .attr("cy", d => mapProjection(d.coords)[1])
+        .attr("r", 2.4)
+        .attr("fill", d => getFillColorForCountry(d.id))
+        .on("click", (event, d) => {
+          event.stopPropagation();
+          handleMapCountryClick(d.id);
+        });
+
+      // Invisible larger hit-target circles for effortless touch/mouse selection without distorting visual accuracy
+      markersGroup.selectAll("circle.microstate-hit-area")
+        .data(microstates)
+        .enter()
+        .append("circle")
+        .attr("class", "microstate-hit-area")
+        .attr("data-hit-id", d => d.id)
+        .attr("cx", d => mapProjection(d.coords)[0])
+        .attr("cy", d => mapProjection(d.coords)[1])
+        .attr("r", 6.5)
+        .on("click", (event, d) => {
+          event.stopPropagation();
+          handleMapCountryClick(d.id);
+        });
+
+      // 3. Arabic Country Labels Layer
+      const labelsGroup = mapG.append("g").attr("class", "labels-layer");
+      labelsGroup.selectAll("text.map-label")
+        .data(COUNTRIES_DATA)
+        .enter()
+        .append("text")
+        .attr("class", "map-label")
+        .attr("data-id", d => d.id)
+        .attr("x", d => mapProjection(d.coords)[0])
+        .attr("y", d => mapProjection(d.coords)[1])
+        .text(d => d.name)
+        .style("font-size", "7px")
+        .style("display", "none");
+
+      updateMapStylesAndFilters();
+    }
+
+    function updateMapStylesAndFilters() {
+      if (!mapG) return;
+      const isolate = document.getElementById("isolate-region-checkbox").checked;
+
+      // Update Polygon Colors & Dimming
+      mapG.selectAll("path.country-path")
+        .attr("fill", function() {
+          const cid = this.getAttribute("data-id");
+          if (!COUNTRY_BY_ID.has(cid)) return appState.theme === "dark" ? "#1e293b" : "#e2e8f0";
+          return getFillColorForCountry(cid);
+        })
+        .classed("selected-country", function() {
+          return this.getAttribute("data-id") === selectedCountryId;
+        })
+        .classed("dimmed", function() {
+          const cid = this.getAttribute("data-id");
+          const c = COUNTRY_BY_ID.get(cid);
+          if (!c) return isolate && focusedRegionFilter !== null;
+          if (isolate && focusedRegionFilter) {
+            if (focusedRegionFilter.type === "continent" && c.continent !== focusedRegionFilter.value) return true;
+            if (focusedRegionFilter.type === "subregion" && c.subregion !== focusedRegionFilter.value) return true;
+          }
+          if (currentFilterStatus !== "all" && getCountryStatus(cid) !== currentFilterStatus) {
+            return true;
+          }
+          return false;
+        });
+
+      // Update Microstate Circles
+      mapG.selectAll("circle.microstate-marker")
+        .attr("fill", d => getFillColorForCountry(d.id))
+        .classed("selected-country", d => d.id === selectedCountryId)
+        .classed("dimmed", d => {
+          if (isolate && focusedRegionFilter) {
+            if (focusedRegionFilter.type === "continent" && d.continent !== focusedRegionFilter.value) return true;
+            if (focusedRegionFilter.type === "subregion" && d.subregion !== focusedRegionFilter.value) return true;
+          }
+          if (currentFilterStatus !== "all" && getCountryStatus(d.id) !== currentFilterStatus) {
+            return true;
+          }
+          return false;
+        });
+
+      updateMapLabelVisibility();
+      updateMicrostateMarkerSizes();
+    }
+
+    function updateMicrostateMarkerSizes() {
+      if (!mapG) return;
+      const baseR = Math.max(1.1, 2.4 / Math.pow(currentZoomK, 0.55));
+      mapG.selectAll("circle.microstate-marker")
+        .attr("r", d => (d.id === selectedCountryId || (inlineMapQuiz.active && inlineMapQuiz.queue[inlineMapQuiz.index] === d.id)) ? baseR * 1.4 : baseR);
+      mapG.selectAll("circle.microstate-hit-area")
+        .attr("r", Math.max(2.5, 6.5 / Math.pow(currentZoomK, 0.65)));
+    }
+
+    function updateMapLabelVisibility() {
+      if (!mapG) return;
+      // Hide labels in Quiz or Blank mode
+      if (currentMapMode === "quiz" || currentMapMode === "blank" || inlineMapQuiz.active) {
+        mapG.selectAll("text.map-label").style("display", "none");
+        return;
+      }
+
+      const fontSize = Math.max(2.4, 8.5 / Math.pow(currentZoomK, 0.72));
+      mapG.selectAll("text.map-label")
+        .style("font-size", `${fontSize}px`)
+        .style("display", d => {
+          if (d.id === selectedCountryId) return "block";
+          if (currentZoomK >= 2.2 && !d.isMicrostate) return "block";
+          if (currentZoomK >= 4.2) return "block";
+          return "none";
+        });
+    }
+
+    function zoomToCountry(countryId, targetScale = 4.5) {
+      const country = COUNTRY_BY_ID.get(countryId);
+      if (!country || !mapSvg) return;
+
+      const container = document.getElementById("map-container");
+      const width = container.clientWidth || 960;
+      const height = container.clientHeight || 540;
+      const [x, y] = mapProjection(country.coords);
+
+      const scale = country.isMicrostate ? Math.max(targetScale, 6.5) : targetScale;
+      const transform = d3.zoomIdentity
+        .translate(width / 2, height / 2)
+        .scale(scale)
+        .translate(-x, -y);
+
+      mapSvg.transition().duration(750).call(mapZoom.transform, transform);
+    }
+
+    function zoomToCountryGroup(countriesList) {
+      if (!countriesList.length || !mapSvg) return;
+      const container = document.getElementById("map-container");
+      const width = container.clientWidth || 960;
+      const height = container.clientHeight || 540;
+
+      const projectedPoints = countriesList.map(c => mapProjection(c.coords));
+      const xs = projectedPoints.map(p => p[0]);
+      const ys = projectedPoints.map(p => p[1]);
+
+      const minX = Math.min(...xs), maxX = Math.max(...xs);
+      const minY = Math.min(...ys), maxY = Math.max(...ys);
+
+      const dx = Math.max(maxX - minX, 40);
+      const dy = Math.max(maxY - minY, 40);
+      const cx = (minX + maxX) / 2;
+      const cy = (minY + maxY) / 2;
+
+      const scale = Math.max(1.2, Math.min(6.5, 0.72 / Math.max(dx / width, dy / height)));
+      const transform = d3.zoomIdentity
+        .translate(width / 2, height / 2)
+        .scale(scale)
+        .translate(-cx, -cy);
+
+      mapSvg.transition().duration(750).call(mapZoom.transform, transform);
+    }
+
+    function resetMapZoom() {
+      if (!mapSvg) return;
+      focusedRegionFilter = null;
+      document.getElementById("isolate-region-checkbox").checked = false;
+      updateMapStylesAndFilters();
+      mapSvg.transition().duration(650).call(mapZoom.transform, d3.zoomIdentity);
+    }
+
+    function handleMapCountryClick(countryId) {
+      // During inline quiz, ignore direct polygon guessing (user picks from the 4 blue-highlighted options)
+      if (inlineMapQuiz.active) {
+        return;
+      }
+
+      // Normal Exploration / Mastery Inspection
+      selectCountryOnMap(countryId, false);
+    }
+
+    function selectCountryOnMap(countryId, shouldZoom = true) {
+      selectedCountryId = countryId;
+      const country = COUNTRY_BY_ID.get(countryId);
+      if (!country) return;
+
+      updateMapStylesAndFilters();
+      if (shouldZoom) zoomToCountry(countryId);
+
+      // Show 4-Element Country Card
+      const card = document.getElementById("country-info-card");
+      card.classList.remove("hidden");
+
+      document.getElementById("card-region-badge").textContent = `${country.continent} • ${country.subregion}`;
+      document.getElementById("card-country-name").textContent = country.name;
+      document.getElementById("card-country-capital").textContent = country.capital;
+
+      const flagImg = document.getElementById("card-country-flag");
+      flagImg.src = getFlagUrl(country.iso2);
+      flagImg.onerror = function() {
+        this.onerror = null;
+        this.src = `https://placehold.co/320x180/0284c7/ffffff?text=${encodeURIComponent(country.name)}`;
+      };
+
+      const prog = getCountryProgress(countryId);
+      updatePillarBadge("pillar-location", "الموقع", prog.location);
+      updatePillarBadge("pillar-capital", "العاصمة", prog.capital);
+      updatePillarBadge("pillar-flag", "العلم", prog.flag);
+    }
+
+    function updatePillarBadge(elId, label, done) {
+      const el = document.getElementById(elId);
+      if (!el) return;
+      el.textContent = `${label} ${done ? "✓" : "✕"}`;
+      el.className = done
+        ? "p-1.5 rounded-lg bg-emerald-100 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300"
+        : "p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500";
+    }
+
+    // Inline Map Quick Quiz Mode: Highlights country in BLUE -> Asks "ما اسم هذه الدولة؟" -> Manual Next button
+    function startInlineMapQuiz(customIds = null) {
+      const pool = customIds && customIds.length
+        ? customIds
+        : (appState.studySet.length ? appState.studySet : COUNTRIES_DATA.map(c => c.id));
+      const shuffled = [...pool].sort(() => Math.random() - 0.5).slice(0, Math.min(15, pool.length));
+
+      inlineMapQuiz = { active: true, queue: shuffled, index: 0, locked: false };
+      document.getElementById("country-info-card").classList.add("hidden");
+      document.getElementById("map-quiz-banner").classList.remove("hidden");
+      updateMapLabelVisibility();
+      renderInlineMapQuizStep();
+    }
+
+    function renderInlineMapQuizStep() {
+      if (inlineMapQuiz.index >= inlineMapQuiz.queue.length) {
+        stopInlineMapQuiz();
+        showToast("انتهى التدريب السريع على الخريطة!");
+        return;
+      }
+      inlineMapQuiz.locked = false;
+      const cid = inlineMapQuiz.queue[inlineMapQuiz.index];
+      const country = COUNTRY_BY_ID.get(cid);
+      document.getElementById("map-quiz-progress").textContent = `${inlineMapQuiz.index + 1} / ${inlineMapQuiz.queue.length}`;
+
+      const fb = document.getElementById("map-quiz-feedback");
+      fb.classList.add("hidden");
+      document.getElementById("map-quiz-next-btn").classList.add("hidden");
+
+      clearMapQuizHighlights();
+      highlightCountryOnMap(cid, "quiz-target-blue");
+      zoomToCountry(cid, country.isMicrostate ? 5.5 : 3.2);
+      updateMicrostateMarkerSizes();
+
+      // Generate 4 hard distractors from same subregion/continent
+      const choices = [country, ...generateHardDistractors(country, 3)].sort(() => Math.random() - 0.5);
+      const choicesBox = document.getElementById("map-quiz-choices");
+      choicesBox.innerHTML = "";
+      choices.forEach(opt => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "px-3 py-1 rounded-lg bg-white/15 hover:bg-white/30 text-white text-xs font-extrabold transition";
+        btn.textContent = opt.name;
+        btn.addEventListener("click", () => handleInlineMapQuizChoice(opt.id, btn));
+        choicesBox.appendChild(btn);
+      });
+    }
+
+    function handleInlineMapQuizChoice(chosenId, clickedBtn) {
+      if (inlineMapQuiz.locked) return;
+      inlineMapQuiz.locked = true;
+      const targetId = inlineMapQuiz.queue[inlineMapQuiz.index];
+      const targetCountry = COUNTRY_BY_ID.get(targetId);
+      const isCorrect = chosenId === targetId;
+
+      recordAnswerResult(targetId, "location", isCorrect);
+      clearMapQuizHighlights();
+
+      const fb = document.getElementById("map-quiz-feedback");
+      fb.classList.remove("hidden");
+
+      if (isCorrect) {
+        highlightCountryOnMap(targetId, "quiz-correct");
+        clickedBtn.classList.add("bg-emerald-500");
+        fb.textContent = `صحيح! ${targetCountry.name} (عاصمتها: ${targetCountry.capital})`;
+        fb.className = "text-xs sm:text-sm font-bold px-2.5 py-1 rounded-lg bg-emerald-500 text-white";
+      } else {
+        highlightCountryOnMap(chosenId, "quiz-wrong");
+        highlightCountryOnMap(targetId, "quiz-correct");
+        clickedBtn.classList.add("bg-rose-500");
+        fb.textContent = `خطأ! الصحيح: ${targetCountry.name} (عاصمتها: ${targetCountry.capital})`;
+        fb.className = "text-xs sm:text-sm font-bold px-2.5 py-1 rounded-lg bg-rose-500 text-white";
+      }
+
+      // Manual Next button only (no automatic setTimeout advancement)
+      document.getElementById("map-quiz-next-btn").classList.remove("hidden");
+    }
+
+    function stopInlineMapQuiz() {
+      inlineMapQuiz.active = false;
+      document.getElementById("map-quiz-banner").classList.add("hidden");
+      clearMapQuizHighlights();
+      setMapMode("explore");
+    }
+
+    function highlightCountryOnMap(countryId, cssClass) {
+      mapG.selectAll(`[data-id="${countryId}"]`).classed(cssClass, true);
+    }
+
+    function clearMapQuizHighlights() {
+      if (!mapG) return;
+      mapG.selectAll(".quiz-correct, .quiz-wrong, .quiz-target-blue")
+        .classed("quiz-correct", false)
+        .classed("quiz-wrong", false)
+        .classed("quiz-target-blue", false);
+      updateMapStylesAndFilters();
+    }
+
+    function setMapMode(mode) {
+      currentMapMode = mode;
+      document.querySelectorAll(".map-mode-btn").forEach(btn => {
+        const active = btn.dataset.mapMode === mode;
+        btn.className = active
+          ? "map-mode-btn active px-2.5 py-1 rounded-lg text-xs font-bold bg-white dark:bg-slate-700 text-sky-600 dark:text-sky-400 shadow-xs whitespace-nowrap"
+          : "map-mode-btn px-2.5 py-1 rounded-lg text-xs font-bold text-slate-600 dark:text-slate-300 whitespace-nowrap";
+      });
+
+      if (mode === "quiz") {
+        startInlineMapQuiz();
+      } else {
+        if (inlineMapQuiz.active) {
+          inlineMapQuiz.active = false;
+          document.getElementById("map-quiz-banner").classList.add("hidden");
+          clearMapQuizHighlights();
+        }
+        updateMapStylesAndFilters();
+      }
+    }
+  </script>
+
+  <!-- ===================================================================== -->
+  <!-- MODULE 4: SIDEBAR TREE, SEARCH & STUDY SET MANAGEMENT                 -->
+  <!-- ===================================================================== -->
+  <script>
+    let expandedContinents = new Set(["آسيا"]);
+    let expandedSubregions = new Set(["الشرق الأوسط"]);
+
+    function renderSidebarTree(searchQuery = "") {
+      const container = document.getElementById("continents-tree");
+      const q = searchQuery.trim().toLowerCase();
+      container.innerHTML = "";
+
+      CONTINENT_STRUCTURE.forEach(cont => {
+        const contCountries = COUNTRIES_DATA.filter(c => c.continent === cont.name);
+        const matchingContCountries = q
+          ? contCountries.filter(c => c.name.includes(q) || c.capital.includes(q))
+          : contCountries;
+
+        if (q && matchingContCountries.length === 0) return;
+
+        const contMastered = contCountries.filter(c => getCountryStatus(c.id) === "mastered").length;
+        const contPct = Math.round((contMastered / contCountries.length) * 100);
+        const isContOpen = q ? true : expandedContinents.has(cont.name);
+
+        const contCard = document.createElement("div");
+        contCard.className = "rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 overflow-hidden";
+
+        contCard.innerHTML = `
+          <div class="p-2.5 flex items-center justify-between cursor-pointer hover:bg-slate-100/80 dark:hover:bg-slate-800 transition select-none" data-cont-header="${cont.name}">
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="text-xs text-slate-400">${isContOpen ? '▾' : '◂'}</span>
+              <span class="text-sm font-extrabold truncate">${cont.name}</span>
+              <span class="text-[10px] font-bold text-slate-400">(${contMastered}/${contCountries.length})</span>
+            </div>
+            <div class="flex items-center gap-1.5 shrink-0">
+              <span class="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">${contPct}%</span>
+              <button data-study-cont="${cont.name}" title="دراسة القارة" class="px-2 py-0.5 rounded-md bg-sky-100 dark:bg-sky-900/70 text-sky-700 dark:text-sky-300 text-[10px] font-bold hover:bg-sky-200">دراسة</button>
+            </div>
+          </div>
+        `;
+
+        if (isContOpen) {
+          const subList = document.createElement("div");
+          subList.className = "px-2 pb-2 space-y-1.5";
+
+          cont.subregions.forEach(subName => {
+            const subCountries = contCountries.filter(c => c.subregion === subName);
+            const matchingSubCountries = q
+              ? subCountries.filter(c => c.name.includes(q) || c.capital.includes(q))
+              : subCountries;
+
+            if (q && matchingSubCountries.length === 0) return;
+
+            const subMastered = subCountries.filter(c => getCountryStatus(c.id) === "mastered").length;
+            const subPct = Math.round((subMastered / subCountries.length) * 100);
+            const isSubOpen = q ? true : expandedSubregions.has(subName);
+
+            const subBox = document.createElement("div");
+            subBox.className = "rounded-lg bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800";
+
+            subBox.innerHTML = `
+              <div class="px-2.5 py-1.5 flex items-center justify-between cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/70 text-xs select-none" data-sub-header="${subName}">
+                <div class="flex items-center gap-1.5 truncate">
+                  <span class="text-[10px] text-slate-400">${isSubOpen ? '▾' : '◂'}</span>
+                  <span class="font-bold truncate">${subName}</span>
+                </div>
+                <div class="flex items-center gap-1.5 shrink-0">
+                  <span class="text-[10px] font-bold text-slate-400">${subMastered}/${subCountries.length} (${subPct}%)</span>
+                  <button data-study-sub="${subName}" class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 hover:bg-sky-100 text-[10px] font-bold text-sky-600">تعلّم</button>
+                </div>
+              </div>
+            `;
+
+            if (isSubOpen) {
+              const countriesUl = document.createElement("div");
+              countriesUl.className = "px-2 pb-2 pt-1 space-y-1 border-t border-slate-100 dark:border-slate-800/80";
+
+              matchingSubCountries.forEach(country => {
+                const status = getCountryStatus(country.id);
+                const dotColor = {
+                  mastered: "bg-emerald-500",
+                  review: "bg-rose-500",
+                  partial: "bg-amber-400",
+                  studied: "bg-sky-400",
+                  unstudied: "bg-slate-300 dark:bg-slate-700"
+                }[status];
+
+                const row = document.createElement("button");
+                row.type = "button";
+                row.className = `w-full px-2 py-1.5 rounded-lg flex items-center justify-between text-right text-xs hover:bg-sky-50 dark:hover:bg-slate-800 transition ${selectedCountryId === country.id ? 'bg-sky-50 dark:bg-slate-800 font-extrabold text-sky-700 dark:text-sky-300' : ''}`;
+                row.innerHTML = `
+                  <div class="flex items-center gap-2 min-w-0">
+                    <span class="w-2 h-2 rounded-full ${dotColor} shrink-0"></span>
+                    <span class="truncate font-semibold">${country.name}</span>
+                  </div>
+                  <span class="text-[10px] text-slate-400 truncate mr-2">${country.capital}</span>
+                `;
+                row.addEventListener("click", () => {
+                  switchView("map");
+                  selectCountryOnMap(country.id, true);
+                  if (window.innerWidth < 1024) toggleMobileSidebar(false);
+                });
+                countriesUl.appendChild(row);
+              });
+
+              subBox.appendChild(countriesUl);
+            }
+
+            subList.appendChild(subBox);
+          });
+
+          contCard.appendChild(subList);
+        }
+
+        container.appendChild(contCard);
+      });
+
+      // Bind expand/collapse & region study actions
+      container.querySelectorAll("[data-cont-header]").forEach(el => {
+        el.addEventListener("click", (e) => {
+          if (e.target.closest("[data-study-cont]")) return;
+          const name = el.dataset.contHeader;
+          expandedContinents.has(name) ? expandedContinents.delete(name) : expandedContinents.add(name);
+          renderSidebarTree(document.getElementById("sidebar-search").value);
+        });
+      });
+
+      container.querySelectorAll("[data-sub-header]").forEach(el => {
+        el.addEventListener("click", (e) => {
+          if (e.target.closest("[data-study-sub]")) return;
+          const name = el.dataset.subHeader;
+          expandedSubregions.has(name) ? expandedSubregions.delete(name) : expandedSubregions.add(name);
+          renderSidebarTree(document.getElementById("sidebar-search").value);
+        });
+      });
+
+      container.querySelectorAll("[data-study-cont]").forEach(btn => {
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const contName = btn.dataset.studyCont;
+          const list = COUNTRIES_DATA.filter(c => c.continent === contName);
+          activateStudyGroup(list.map(c => c.id), `قارة ${contName}`, { type: "continent", value: contName });
+        });
+      });
+
+      container.querySelectorAll("[data-study-sub]").forEach(btn => {
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const subName = btn.dataset.studySub;
+          const list = COUNTRIES_DATA.filter(c => c.subregion === subName);
+          activateStudyGroup(list.map(c => c.id), subName, { type: "subregion", value: subName });
+        });
+      });
+    }
+
+    function activateStudyGroup(countryIds, title, regionFilter = null) {
+      if (!countryIds.length) return;
+      appState.studySet = countryIds;
+      appState.studySetIndex = 0;
+      saveState();
+
+      focusedRegionFilter = regionFilter;
+      updateStudyBarUI(title);
+      switchView("map");
+
+      const countries = countryIds.map(id => COUNTRY_BY_ID.get(id)).filter(Boolean);
+      zoomToCountryGroup(countries);
+      selectCountryOnMap(countryIds[0], false);
+      updateMapStylesAndFilters();
+
+      if (window.innerWidth < 1024) toggleMobileSidebar(false);
+    }
+
+    function updateStudyBarUI(customTitle = null) {
+      const bar = document.getElementById("active-study-bar");
+      if (!appState.studySet || appState.studySet.length === 0) {
+        bar.classList.add("hidden");
+        return;
+      }
+      bar.classList.remove("hidden");
+      const label = customTitle || `مجموعة التعلم (${appState.studySetIndex + 1} من ${appState.studySet.length})`;
+      document.getElementById("active-study-title").textContent = label;
+    }
+
+    function navigateStudySet(delta) {
+      if (!appState.studySet.length) {
+        // Fallback: navigate through all 195 countries
+        const idx = COUNTRIES_DATA.findIndex(c => c.id === selectedCountryId);
+        const nextIdx = (idx + delta + COUNTRIES_DATA.length) % COUNTRIES_DATA.length;
+        selectCountryOnMap(COUNTRIES_DATA[nextIdx].id, true);
+        return;
+      }
+      appState.studySetIndex = (appState.studySetIndex + delta + appState.studySet.length) % appState.studySet.length;
+      saveState();
+      updateStudyBarUI(`مجموعة التعلم (${appState.studySetIndex + 1} من ${appState.studySet.length})`);
+      selectCountryOnMap(appState.studySet[appState.studySetIndex], true);
+    }
+
+    function toggleMobileSidebar(forceState = null) {
+      const sidebar = document.getElementById("app-sidebar");
+      const backdrop = document.getElementById("sidebar-backdrop");
+      const isCurrentlyClosed = sidebar.classList.contains("translate-x-full");
+      const shouldOpen = forceState !== null ? forceState : isCurrentlyClosed;
+
+      if (shouldOpen) {
+        sidebar.classList.remove("translate-x-full");
+        sidebar.classList.add("translate-x-0");
+        if (window.innerWidth < 1024) backdrop.classList.remove("hidden");
+      } else {
+        sidebar.classList.add("translate-x-full");
+        sidebar.classList.remove("translate-x-0");
+        backdrop.classList.add("hidden");
+      }
+    }
+  </script>
+
+  <!-- ===================================================================== -->
+  <!-- MODULE 5: COMPREHENSIVE FLEXIBLE EXAM & QUIZ ENGINE                   -->
+  <!-- ===================================================================== -->
+  <script>
+    let activeExam = null;
+    let lastExamConfig = null;
+    let customPickedExamIds = new Set();
+
+    function initExamSelectors() {
+      const contSel = document.getElementById("exam-continent-select");
+      const subSel = document.getElementById("exam-subregion-select");
+
+      CONTINENT_STRUCTURE.forEach(c => {
+        const opt = document.createElement("option");
+        opt.value = c.name;
+        opt.textContent = `قارة ${c.name}`;
+        contSel.appendChild(opt);
+
+        c.subregions.forEach(s => {
+          const sOpt = document.createElement("option");
+          sOpt.value = s;
+          sOpt.textContent = `${c.name} — ${s}`;
+          subSel.appendChild(sOpt);
+        });
+      });
+
+      renderExamCustomPickList();
+      updateExamAvailableCount();
+    }
+
+    function renderExamCustomPickList(filter = "") {
+      const list = document.getElementById("exam-custom-list");
+      const q = filter.trim().toLowerCase();
+      list.innerHTML = "";
+      COUNTRIES_DATA.filter(c => !q || c.name.includes(q) || c.capital.includes(q)).forEach(c => {
+        const label = document.createElement("label");
+        label.className = "flex items-center gap-1.5 p-1.5 rounded bg-white dark:bg-slate-900 cursor-pointer truncate";
+        const checked = customPickedExamIds.has(c.id) ? "checked" : "";
+        label.innerHTML = `<input type="checkbox" value="${c.id}" ${checked} class="rounded text-sky-600" /> <span class="truncate">${c.name}</span>`;
+        label.querySelector("input").addEventListener("change", (e) => {
+          e.target.checked ? customPickedExamIds.add(c.id) : customPickedExamIds.delete(c.id);
+          updateExamAvailableCount();
+        });
+        list.appendChild(label);
+      });
+    }
+
+    function getCountriesForExamScope() {
+      const scope = document.getElementById("exam-scope-select").value;
+      switch (scope) {
+        case "world":
+          return [...COUNTRIES_DATA];
+        case "current_set":
+          return appState.studySet.length
+            ? appState.studySet.map(id => COUNTRY_BY_ID.get(id)).filter(Boolean)
+            : [...COUNTRIES_DATA];
+        case "continent": {
+          const cont = document.getElementById("exam-continent-select").value;
+          return COUNTRIES_DATA.filter(c => c.continent === cont);
+        }
+        case "subregion": {
+          const sub = document.getElementById("exam-subregion-select").value;
+          return COUNTRIES_DATA.filter(c => c.subregion === sub);
+        }
+        case "unstudied":
+          return COUNTRIES_DATA.filter(c => getCountryStatus(c.id) === "unstudied");
+        case "mistakes":
+          return COUNTRIES_DATA.filter(c => {
+            const p = getCountryProgress(c.id);
+            return p.needsReviewFlag || p.mistakes > 0;
+          });
+        case "mastered":
+          return COUNTRIES_DATA.filter(c => getCountryStatus(c.id) === "mastered");
+        case "mixed": {
+          const mistakes = COUNTRIES_DATA.filter(c => getCountryProgress(c.id).needsReviewFlag);
+          const unstudied = COUNTRIES_DATA.filter(c => getCountryStatus(c.id) === "unstudied");
+          const mastered = COUNTRIES_DATA.filter(c => getCountryStatus(c.id) === "mastered");
+          return [...mistakes, ...unstudied, ...mastered];
+        }
+        case "custom_pick":
+          return Array.from(customPickedExamIds).map(id => COUNTRY_BY_ID.get(id)).filter(Boolean);
+        default:
+          return [...COUNTRIES_DATA];
+      }
+    }
+
+    function updateExamAvailableCount() {
+      const pool = getCountriesForExamScope();
+      const avail = pool.length;
+      document.getElementById("exam-available-count").textContent = avail;
+      const input = document.getElementById("exam-count-input");
+      input.max = Math.max(1, avail);
+      if (avail > 0 && Number(input.value) > avail) {
+        input.value = avail;
+      }
+    }
+
+    function launchExam(config) {
+      const pool = config.countries;
+      if (!pool || pool.length === 0) {
+        showToast("لا توجد دول متاحة في هذا النطاق حالياً.");
+        return;
+      }
+
+      lastExamConfig = { ...config };
+      const count = Math.min(Math.max(1, config.count), pool.length);
+      const selectedCountries = [...pool].sort(() => Math.random() - 0.5).slice(0, count);
+      // Build Grouped & Ordered Questions Queue per country (never merged):
+      // Q1: Blue-highlighted country on map -> «ما اسم هذه الدولة؟» (aspect: "location")
+      // Q2: «ما علم [اسم الدولة]؟» (aspect: "flag") — always shown even if Q1 was wrong
+      // Q3: «ما عاصمة [اسم الدولة]؟» (aspect: "capital") — always shown regardless of Q1/Q2
+      const questions = [];
+      selectedCountries.forEach(c => {
+        if (config.type === "comprehensive" || config.type === "mastery_3_pillars") {
+          questions.push({ country: c, aspect: "location", format: "blue_map_to_name" });
+          questions.push({ country: c, aspect: "flag", format: "country_to_flag" });
+          questions.push({ country: c, aspect: "capital", format: "country_to_capital" });
+        } else if (config.type === "location_and_flag") {
+          questions.push({ country: c, aspect: "location", format: "blue_map_to_name" });
+          questions.push({ country: c, aspect: "flag", format: "country_to_flag" });
+        } else if (config.type === "capital") {
+          questions.push({ country: c, aspect: "capital", format: "country_to_capital" });
+        } else if (config.type === "flag") {
+          questions.push({ country: c, aspect: "flag", format: "country_to_flag" });
+        }
+      });
+
+      activeExam = {
+        config,
+        targetCountries: selectedCountries,
+        questions,
+        currentIndex: 0,
+        correctCount: 0,
+        wrongCount: 0,
+        answeredCurrent: false,
+        sessionResults: {},
+        aspectStats: {
+          location: { right: 0, total: 0 },
+          capital: { right: 0, total: 0 },
+          flag: { right: 0, total: 0 }
+        }
+      };
+
+      selectedCountries.forEach(c => {
+        activeExam.sessionResults[c.id] = { location: null, capital: null, flag: null };
+      });
+
+      switchView("exam");
+      document.getElementById("exam-config-panel").classList.add("hidden");
+      document.getElementById("exam-results-panel").classList.add("hidden");
+      document.getElementById("exam-active-panel").classList.remove("hidden");
+
+      renderCurrentExamQuestion();
+    }
+
+    /**
+     * Generates challenging, geographically proximate distractors:
+     * Prioritizes same subregion first, then same continent, ensuring realistic difficulty.
+     */
+    function generateHardDistractors(targetCountry, count = 3) {
+      const sameSub = COUNTRIES_DATA.filter(c => c.id !== targetCountry.id && c.subregion === targetCountry.subregion);
+      const sameCont = COUNTRIES_DATA.filter(c => c.id !== targetCountry.id && c.continent === targetCountry.continent && c.subregion !== targetCountry.subregion);
+      const others = COUNTRIES_DATA.filter(c => c.id !== targetCountry.id && c.continent !== targetCountry.continent);
+
+      const pool = [
+        ...sameSub.sort(() => Math.random() - 0.5),
+        ...sameCont.sort(() => Math.random() - 0.5),
+        ...others.sort(() => Math.random() - 0.5)
+      ];
+      return pool.slice(0, count);
+    }
+
+    function renderCurrentExamQuestion() {
+      if (!activeExam) return;
+      if (activeExam.currentIndex >= activeExam.questions.length) {
+        finishExam();
+        return;
+      }
+
+      const q = activeExam.questions[activeExam.currentIndex];
+      activeExam.answeredCurrent = false;
+
+      // Update Header & Progress
+      document.getElementById("exam-q-counter").textContent = `سؤال ${activeExam.currentIndex + 1} من ${activeExam.questions.length}`;
+      const typeNames = {
+        location: "تحديد الدولة (1/3)",
+        flag: "العلم (2/3)",
+        capital: "العاصمة (3/3)"
+      };
+      document.getElementById("exam-q-type-badge").textContent = typeNames[q.aspect] || "اختبار";
+      document.getElementById("exam-live-correct").textContent = activeExam.correctCount;
+      document.getElementById("exam-live-wrong").textContent = activeExam.wrongCount;
+
+      const pct = Math.round((activeExam.currentIndex / activeExam.questions.length) * 100);
+      document.getElementById("exam-progress-bar").style.width = `${pct}%`;
+
+      // Hint in Easy difficulty
+      const hintEl = document.getElementById("exam-prompt-hint");
+      if (activeExam.config.difficulty === "easy") {
+        hintEl.textContent = `تلميح: تقع في ${q.country.continent} (${q.country.subregion})`;
+        hintEl.classList.remove("hidden");
+      } else {
+        hintEl.classList.add("hidden");
+      }
+
+      // Reset UI containers
+      const flagBox = document.getElementById("exam-flag-prompt-box");
+      const optionsGrid = document.getElementById("exam-options-grid");
+      const mapBox = document.getElementById("exam-map-question-box");
+      const compBox = document.getElementById("exam-comparison-box");
+      const summaryCard = document.getElementById("exam-target-summary-card");
+      const feedbackBar = document.getElementById("exam-feedback-bar");
+
+      flagBox.classList.add("hidden");
+      optionsGrid.classList.remove("hidden");
+      optionsGrid.innerHTML = "";
+      mapBox.classList.add("hidden");
+      compBox.classList.add("hidden");
+      summaryCard.classList.add("hidden");
+      feedbackBar.classList.add("hidden");
+
+      const promptLabel = document.getElementById("exam-prompt-label");
+      const promptMain = document.getElementById("exam-prompt-main");
+
+      // Prepare 4 hard options (target + 3 nearby/similar countries)
+      const fourCountries = [q.country, ...generateHardDistractors(q.country, 3)].sort(() => Math.random() - 0.5);
+      q.optionsList = fourCountries;
+
+      if (q.format === "blue_map_to_name") {
+        // Question 1: Highlight target country in BLUE on map & ask «ما اسم هذه الدولة؟»
+        promptLabel.textContent = "الدولة المظللة باللون الأزرق على الخريطة:";
+        promptMain.textContent = "ما اسم هذه الدولة؟";
+        mapBox.classList.remove("hidden");
+        mountBlueHighlightedExamMap(q.country);
+
+        fourCountries.forEach(optCountry => {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "exam-opt-btn p-4 rounded-xl border-2 border-slate-200 dark:border-slate-700 hover:border-blue-500 bg-slate-50 dark:bg-slate-800/70 text-base font-extrabold transition text-center";
+          btn.textContent = optCountry.name;
+          btn.dataset.cid = optCountry.id;
+          btn.addEventListener("click", () => submitSingleExamAnswer(optCountry.id === q.country.id, optCountry, btn));
+          optionsGrid.appendChild(btn);
+        });
+
+      } else if (q.format === "country_to_flag") {
+        // Question 2: Ask «ما علم [اسم الدولة]؟» with real flag options (uncropped object-contain)
+        promptLabel.textContent = "اختبار الأعلام:";
+        promptMain.textContent = `ما علم ${q.country.name}؟`;
+        optionsGrid.className = "grid grid-cols-2 gap-3 max-w-2xl mx-auto";
+
+        fourCountries.forEach(optCountry => {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "exam-opt-btn h-28 sm:h-32 p-2 rounded-xl border-2 border-slate-200 dark:border-slate-700 hover:border-sky-500 bg-slate-100 dark:bg-slate-800/70 transition flex items-center justify-center";
+          btn.dataset.cid = optCountry.id;
+          btn.innerHTML = `<img src="${getFlagUrl(optCountry.iso2)}" alt="خيار علم" class="max-h-full max-w-full w-auto h-auto object-contain rounded-sm shadow-2xs pointer-events-none" />`;
+          btn.addEventListener("click", () => submitSingleExamAnswer(optCountry.id === q.country.id, optCountry, btn));
+          optionsGrid.appendChild(btn);
+        });
+
+      } else if (q.format === "country_to_capital") {
+        // Question 3: Always uses exact format «ما عاصمة [اسم الدولة]؟»
+        promptLabel.textContent = "اختبار العواصم:";
+        promptMain.textContent = `ما عاصمة ${q.country.name}؟`;
+        optionsGrid.className = "grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-2xl mx-auto";
+
+        fourCountries.forEach(optCountry => {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "exam-opt-btn p-4 rounded-xl border-2 border-slate-200 dark:border-slate-700 hover:border-sky-500 bg-slate-50 dark:bg-slate-800/70 text-base font-extrabold transition text-center";
+          btn.textContent = optCountry.capital;
+          btn.dataset.cid = optCountry.id;
+          btn.addEventListener("click", () => submitSingleExamAnswer(optCountry.id === q.country.id, optCountry, btn));
+          optionsGrid.appendChild(btn);
+        });
+      }
+    }
+
+    /**
+     * Mounts an interactive vector map with the target country highlighted in BLUE (#2563eb)
+     * and zoomed appropriately to show its geographical position without revealing its name.
+     */
+    function mountBlueHighlightedExamMap(targetCountry) {
+      const slot = document.getElementById("exam-map-slot");
+      slot.innerHTML = "";
+
+      const width = slot.clientWidth || 700;
+      const height = slot.clientHeight || 340;
+
+      const svg = d3.select(slot)
+        .append("svg")
+        .attr("viewBox", `0 0 ${width} ${height}`)
+        .attr("class", "w-full h-full touch-none cursor-grab");
+
+      const g = svg.append("g");
+      const proj = d3.geoNaturalEarth1().rotate([0, 0]).scale(width / 5.2).translate([width / 2, height / 1.85]);
+      const pathGen = d3.geoPath().projection(proj);
+
+      const zoom = d3.zoom().scaleExtent([1, 16]).on("zoom", (ev) => {
+        g.attr("transform", ev.transform);
+        const r = Math.max(1.4, 3.2 / Math.pow(ev.transform.k, 0.55));
+        g.selectAll("circle.microstate-marker").attr("r", d => d.id === targetCountry.id ? r * 1.45 : r);
+      });
+      svg.call(zoom);
+
+      const isDark = appState.theme === "dark";
+      const neutralFill = isDark ? "#334155" : "#cbd5e1";
+
+      g.selectAll("path")
+        .data(worldFeatures)
+        .enter()
+        .append("path")
+        .attr("d", pathGen)
+        .attr("class", d => `country-path ${normalizeFeatureCountryId(d.id) === targetCountry.id ? "quiz-target-blue" : ""}`)
+        .attr("fill", d => normalizeFeatureCountryId(d.id) === targetCountry.id ? "#2563eb" : neutralFill);
+
+      if (worldMeshGeometry) {
+        g.append("path")
+          .datum(worldMeshGeometry)
+          .attr("d", pathGen)
+          .attr("class", "country-mesh-layer");
+      }
+
+      // Proportional geographic dots for microstates
+      g.selectAll("circle.microstate-marker")
+        .data(COUNTRIES_DATA.filter(c => c.isMicrostate))
+        .enter()
+        .append("circle")
+        .attr("class", d => `microstate-marker ${d.id === targetCountry.id ? "quiz-target-blue" : ""}`)
+        .attr("cx", d => proj(d.coords)[0])
+        .attr("cy", d => proj(d.coords)[1])
+        .attr("r", d => d.id === targetCountry.id ? 4.2 : 2.2)
+        .attr("fill", d => d.id === targetCountry.id ? "#2563eb" : neutralFill);
+
+      // Center & zoom smoothly on the blue-highlighted target country
+      const [tx, ty] = proj(targetCountry.coords);
+      const scale = targetCountry.isMicrostate ? 5.2 : 2.8;
+      svg.call(zoom.transform, d3.zoomIdentity.translate(width / 2, height / 2).scale(scale).translate(-tx, -ty));
+    }
+
+    /**
+     * Evaluates both answers (Country Name + Flag) independently within the same question.
+     */
+    function evaluateDualNameAndFlagAnswer(q) {
+      if (!activeExam || activeExam.answeredCurrent) return;
+      activeExam.answeredCurrent = true;
+
+      const nameCorrect = activeExam.dualSelection.nameId === q.country.id;
+      const flagCorrect = activeExam.dualSelection.flagId === q.country.id;
+
+      // Independent tracking for Location/Identification & Flag
+      activeExam.aspectStats.location.total++;
+      activeExam.aspectStats.flag.total++;
+      if (nameCorrect) {
+        activeExam.correctCount++;
+        activeExam.aspectStats.location.right++;
+      } else {
+        activeExam.wrongCount++;
+      }
+      if (flagCorrect) {
+        activeExam.correctCount++;
+        activeExam.aspectStats.flag.right++;
+      } else {
+        activeExam.wrongCount++;
+      }
+
+      activeExam.sessionResults[q.country.id].location = nameCorrect;
+      activeExam.sessionResults[q.country.id].flag = flagCorrect;
+
+      recordAnswerResult(q.country.id, "location", nameCorrect);
+      recordAnswerResult(q.country.id, "flag", flagCorrect);
+
+      document.getElementById("submit-dual-answer-btn").classList.add("hidden");
+
+      // Independent visual feedback on Name buttons
+      document.getElementById("dual-name-status").textContent = nameCorrect ? "اسم الدولة: صحيح ✓" : "اسم الدولة: خطأ ✕";
+      document.getElementById("dual-name-status").className = `text-xs font-extrabold ${nameCorrect ? "text-emerald-600" : "text-rose-600"}`;
+
+      document.querySelectorAll(".dual-name-btn").forEach(btn => {
+        btn.disabled = true;
+        if (btn.dataset.cid === q.country.id) {
+          btn.classList.add("border-emerald-500", "bg-emerald-50", "dark:bg-emerald-950/60", "text-emerald-700", "dark:text-emerald-300");
+        } else if (btn.dataset.cid === activeExam.dualSelection.nameId && !nameCorrect) {
+          btn.classList.add("border-rose-500", "bg-rose-50", "dark:bg-rose-950/60", "text-rose-700", "dark:text-rose-300");
+        }
+      });
+
+      // Independent visual feedback on Flag buttons
+      document.getElementById("dual-flag-status").textContent = flagCorrect ? "علم الدولة: صحيح ✓" : "علم الدولة: خطأ ✕";
+      document.getElementById("dual-flag-status").className = `text-xs font-extrabold ${flagCorrect ? "text-emerald-600" : "text-rose-600"}`;
+
+      document.querySelectorAll(".dual-flag-btn").forEach(btn => {
+        btn.disabled = true;
+        btn.classList.remove("ring-2", "ring-blue-500");
+        if (btn.dataset.cid === q.country.id) {
+          btn.classList.add("border-emerald-500", "bg-emerald-50", "dark:bg-emerald-950/60", "ring-2", "ring-emerald-500");
+        } else if (btn.dataset.cid === activeExam.dualSelection.flagId && !flagCorrect) {
+          btn.classList.add("border-rose-500", "bg-rose-50", "dark:bg-rose-950/60", "ring-2", "ring-rose-500");
+        }
+      });
+
+      // Render full comparison cards (Flag + Name + Capital for all 4 choices)
+      renderOptionsComparisonGrid(q.optionsList, q.country.id, [activeExam.dualSelection.nameId, activeExam.dualSelection.flagId]);
+
+      const fbBar = document.getElementById("exam-feedback-bar");
+      const fbIcon = document.getElementById("exam-feedback-icon");
+      const fbText = document.getElementById("exam-feedback-text");
+      fbBar.classList.remove("hidden");
+
+      const bothRight = nameCorrect && flagCorrect;
+      fbBar.className = bothRight
+        ? "p-4 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200"
+        : "p-4 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3 bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200";
+      fbIcon.textContent = bothRight ? "✓" : "!";
+      fbText.textContent = bothRight
+        ? `ممتاز! أتقنت اسم وعلم ${q.country.name} (العاصمة: ${q.country.capital})`
+        : `النتيجة: الاسم (${nameCorrect ? "صحيح ✓" : "خطأ ✕"}) • العلم (${flagCorrect ? "صحيح ✓" : "خطأ ✕"}) — الصحيح: ${q.country.name}`;
+
+      updateNextButtonLabel();
+    }
+
+    function submitSingleExamAnswer(isCorrect, chosenCountry, clickedBtn) {
+      if (!activeExam || activeExam.answeredCurrent) return;
+      activeExam.answeredCurrent = true;
+
+      const q = activeExam.questions[activeExam.currentIndex];
+      activeExam.aspectStats[q.aspect].total++;
+      if (isCorrect) {
+        activeExam.correctCount++;
+        activeExam.aspectStats[q.aspect].right++;
+      } else {
+        activeExam.wrongCount++;
+      }
+
+      activeExam.sessionResults[q.country.id][q.aspect] = isCorrect;
+      recordAnswerResult(q.country.id, q.aspect, isCorrect);
+
+      if (clickedBtn) {
+        document.querySelectorAll(".exam-opt-btn").forEach(btn => {
+          btn.disabled = true;
+          if (btn.dataset.cid === q.country.id) {
+            btn.classList.add("border-emerald-500", "bg-emerald-50", "dark:bg-emerald-950/60", "text-emerald-700", "dark:text-emerald-300");
+          } else if (btn === clickedBtn && !isCorrect) {
+            btn.classList.add("border-rose-500", "bg-rose-50", "dark:bg-rose-950/60", "text-rose-700", "dark:text-rose-300");
+          }
+        });
+      }
+
+      // Show Target Country Card (Flag + Name + Capital) after every answer (right or wrong)
+      const summaryCard = document.getElementById("exam-target-summary-card");
+      summaryCard.classList.remove("hidden");
+      const summaryFlag = document.getElementById("exam-summary-flag");
+      summaryFlag.src = getFlagUrl(q.country.iso2);
+      summaryFlag.onerror = function() {
+        this.onerror = null;
+        this.src = `https://placehold.co/120x80/0284c7/ffffff?text=${encodeURIComponent(q.country.name)}`;
+      };
+      document.getElementById("exam-summary-name").textContent = q.country.name;
+      document.getElementById("exam-summary-capital").textContent = q.country.capital;
+
+      // Render full comparison cards (Flag + Name + Capital for all 4 choices)
+      renderOptionsComparisonGrid(q.optionsList, q.country.id, [chosenCountry.id]);
+
+      const fbBar = document.getElementById("exam-feedback-bar");
+      const fbIcon = document.getElementById("exam-feedback-icon");
+      const fbText = document.getElementById("exam-feedback-text");
+
+      const aspectLabels = {
+        location: "تحديد الدولة",
+        flag: "علم الدولة",
+        capital: "عاصمة الدولة"
+      };
+      const aspectLabel = aspectLabels[q.aspect] || "";
+
+      fbBar.classList.remove("hidden");
+      if (isCorrect) {
+        fbBar.className = "p-3.5 sm:p-4 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3 sticky top-0 z-20 shadow-sm bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200";
+        fbIcon.textContent = "✓";
+        fbText.textContent = `إجابة صحيحة في (${aspectLabel}) — ${q.country.name} • العاصمة: ${q.country.capital}`;
+      } else {
+        fbBar.className = "p-3.5 sm:p-4 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3 sticky top-0 z-20 shadow-sm bg-rose-50 dark:bg-rose-950/80 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200";
+        fbIcon.textContent = "✕";
+        fbText.textContent = `إجابة خاطئة في (${aspectLabel}) — الصحيح: ${q.country.name} • العاصمة: ${q.country.capital}`;
+      }
+
+      updateNextButtonLabel();
+    }
+
+    function updateNextButtonLabel() {
+      document.getElementById("exam-live-correct").textContent = activeExam.correctCount;
+      document.getElementById("exam-live-wrong").textContent = activeExam.wrongCount;
+      const nextBtn = document.getElementById("exam-next-q-btn");
+      nextBtn.textContent = activeExam.currentIndex + 1 >= activeExam.questions.length ? "عرض النتيجة النهائية ←" : "التالي ←";
+    }
+
+    /**
+     * Displays all 4 choices after answering, showing each country's Flag, Name, and Capital
+     * so the learner can compare the correct country with the distractors.
+     */
+    function renderOptionsComparisonGrid(optionsList, correctId, chosenIds = []) {
+      const box = document.getElementById("exam-comparison-box");
+      const grid = document.getElementById("exam-comparison-grid");
+      box.classList.remove("hidden");
+      grid.innerHTML = "";
+
+      optionsList.forEach(c => {
+        const isCorrect = c.id === correctId;
+        const isUserWrongChoice = !isCorrect && chosenIds.includes(c.id);
+
+        let borderClass = "border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40";
+        let badgeHtml = "";
+        if (isCorrect) {
+          borderClass = "border-emerald-500 bg-emerald-50/80 dark:bg-emerald-950/50";
+          badgeHtml = `<span class="text-[10px] font-extrabold px-2 py-0.5 rounded bg-emerald-600 text-white">الإجابة الصحيحة</span>`;
+        } else if (isUserWrongChoice) {
+          borderClass = "border-rose-400 bg-rose-50/80 dark:bg-rose-950/50";
+          badgeHtml = `<span class="text-[10px] font-extrabold px-2 py-0.5 rounded bg-rose-600 text-white">اختيارك</span>`;
+        }
+
+        const card = document.createElement("div");
+        card.className = `p-2.5 rounded-xl border-2 ${borderClass} flex items-center justify-between gap-2.5 text-xs`;
+        card.innerHTML = `
+          <div class="flex items-center gap-2.5 min-w-0">
+            <div class="w-12 h-8 rounded bg-slate-100 dark:bg-slate-800/70 border border-slate-300/70 dark:border-slate-600/70 p-0.5 flex items-center justify-center shrink-0">
+              <img src="${getFlagUrl(c.iso2)}" alt="${c.name}" class="max-w-full max-h-full w-auto h-auto object-contain rounded-2xs" />
+            </div>
+            <div class="min-w-0">
+              <div class="font-extrabold text-slate-900 dark:text-white truncate">${c.name}</div>
+              <div class="text-[11px] text-slate-500 dark:text-slate-400 truncate">العاصمة: <span class="font-bold text-slate-700 dark:text-slate-200">${c.capital}</span></div>
+            </div>
+          </div>
+          ${badgeHtml}
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+    function resetExamViewToSetup() {
+      activeExam = null;
+      const slot = document.getElementById("exam-map-slot");
+      if (slot) slot.innerHTML = "";
+      clearMapQuizHighlights();
+      document.getElementById("exam-active-panel").classList.add("hidden");
+      document.getElementById("exam-results-panel").classList.add("hidden");
+      document.getElementById("exam-config-panel").classList.remove("hidden");
+      updateExamAvailableCount();
+    }
+
+    function finishExam() {
+      if (!activeExam) return;
+      const completedExam = activeExam;
+      activeExam = null;
+      clearMapQuizHighlights();
+
+      const total = completedExam.correctCount + completedExam.wrongCount;
+      const scorePct = total > 0 ? Math.round((completedExam.correctCount / total) * 100) : 0;
+
+      // Save to exam history
+      appState.examHistory.push({
+        date: Date.now(),
+        type: completedExam.config.type,
+        scorePct,
+        correct: completedExam.correctCount,
+        total
+      });
+      if (appState.examHistory.length > 30) appState.examHistory.shift();
+      saveState();
+
+      document.getElementById("exam-active-panel").classList.add("hidden");
+      document.getElementById("exam-results-panel").classList.remove("hidden");
+
+      document.getElementById("res-score-pct").textContent = `${scorePct}%`;
+      document.getElementById("res-correct-ans").textContent = completedExam.correctCount;
+      document.getElementById("res-wrong-ans").textContent = completedExam.wrongCount;
+
+      let masteredCount = 0;
+      let reviewCount = 0;
+      const mistakeCountryIds = [];
+
+      const listEl = document.getElementById("res-countries-list");
+      listEl.innerHTML = "";
+
+      completedExam.targetCountries.forEach(c => {
+        const status = getCountryStatus(c.id);
+        const res = completedExam.sessionResults[c.id];
+        const hadMistake = res.location === false || res.capital === false || res.flag === false;
+
+        if (status === "mastered") masteredCount++;
+        else reviewCount++;
+
+        if (hadMistake) mistakeCountryIds.push(c.id);
+
+        const item = document.createElement("div");
+        item.className = "p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs";
+        item.innerHTML = `
+          <div class="flex items-center gap-2 truncate">
+            <div class="w-8 h-5 rounded-xs bg-slate-100 dark:bg-slate-800/70 border border-slate-300/70 dark:border-slate-600/70 p-0.5 flex items-center justify-center shrink-0">
+              <img src="${getFlagUrl(c.iso2)}" alt="${c.name}" class="max-w-full max-h-full w-auto h-auto object-contain" />
+            </div>
+            <span class="font-bold truncate">${c.name}</span>
+          </div>
+          <span class="px-2 py-0.5 rounded-md font-bold ${status === 'mastered' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}">
+            ${status === 'mastered' ? 'محفوظة ✓' : 'تحتاج مراجعة'}
+          </span>
+        `;
+        listEl.appendChild(item);
+      });
+
+      document.getElementById("res-mastered-countries").textContent = masteredCount;
+      document.getElementById("res-review-countries").textContent = reviewCount;
+
+      const formatAspect = (stat) => stat.total === 0 ? "غير مشمول" : `${stat.right}/${stat.total} (${Math.round((stat.right / stat.total) * 100)}%)`;
+      document.getElementById("res-pillar-loc").textContent = formatAspect(completedExam.aspectStats.location);
+      document.getElementById("res-pillar-cap").textContent = formatAspect(completedExam.aspectStats.capital);
+      document.getElementById("res-pillar-flg").textContent = formatAspect(completedExam.aspectStats.flag);
+
+      const mistakesBtn = document.getElementById("practice-exam-mistakes-btn");
+      if (mistakeCountryIds.length > 0) {
+        mistakesBtn.classList.remove("hidden");
+        mistakesBtn.onclick = () => {
+          launchExam({
+            countries: mistakeCountryIds.map(id => COUNTRY_BY_ID.get(id)),
+            count: mistakeCountryIds.length,
+            type: "mastery_3_pillars",
+            difficulty: completedExam.config.difficulty,
+            scope: "mistakes"
+          });
+        };
+      } else {
+        mistakesBtn.classList.add("hidden");
+      }
+
+      refreshAllUI();
+    }
+  </script>
+
+  <!-- ===================================================================== -->
+  <!-- MODULE 6: REVIEW QUEUE, STATISTICS DASHBOARD & DATA PORTABILITY       -->
+  <!-- ===================================================================== -->
+  <script>
+    function renderReviewView() {
+      const now = Date.now();
+      const mistakeCountries = [];
+      const partialCountries = [];
+      const spacedDueCountries = [];
+
+      COUNTRIES_DATA.forEach(c => {
+        const p = getCountryProgress(c.id);
+        const status = getCountryStatus(c.id);
+        if (status === "review" || p.needsReviewFlag) {
+          mistakeCountries.push(c);
+        } else if (status === "partial") {
+          partialCountries.push(c);
+        } else if (status === "mastered" && p.nextReview && p.nextReview <= now) {
+          spacedDueCountries.push(c);
+        }
+      });
+
+      document.getElementById("rev-mistakes-count").textContent = mistakeCountries.length;
+      document.getElementById("rev-partial-count").textContent = partialCountries.length;
+      document.getElementById("rev-spaced-count").textContent = spacedDueCountries.length;
+
+      const totalBadge = mistakeCountries.length + spacedDueCountries.length;
+      const badgeEl = document.getElementById("review-badge");
+      if (totalBadge > 0) {
+        badgeEl.textContent = totalBadge;
+        badgeEl.classList.remove("hidden");
+      } else {
+        badgeEl.classList.add("hidden");
+      }
+
+      fillReviewBucket("rev-mistakes-list", mistakeCountries, "لا توجد أخطاء مسجلة حالياً.");
+      fillReviewBucket("rev-partial-list", partialCountries, "لا توجد دول بإتقان جزئي حالياً.");
+      fillReviewBucket("rev-spaced-list", spacedDueCountries, "لا توجد مراجعات مجدولة مستحقة اليوم.");
+    }
+
+    function fillReviewBucket(containerId, list, emptyMsg) {
+      const el = document.getElementById(containerId);
+      el.innerHTML = "";
+      if (!list.length) {
+        el.innerHTML = `<p class="text-xs text-slate-400 py-3 text-center">${emptyMsg}</p>`;
+        return;
+      }
+      list.forEach(c => {
+        const p = getCountryProgress(c.id);
+        const row = document.createElement("div");
+        row.className = "p-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 flex items-center justify-between text-xs";
+        row.innerHTML = `
+          <div class="flex items-center gap-2 min-w-0">
+            <div class="w-8 h-5 rounded-xs bg-slate-100 dark:bg-slate-800/70 border border-slate-300/70 dark:border-slate-600/70 p-0.5 flex items-center justify-center shrink-0">
+              <img src="${getFlagUrl(c.iso2)}" alt="${c.name}" class="max-w-full max-h-full w-auto h-auto object-contain" />
+            </div>
+            <div class="truncate">
+              <div class="font-bold truncate">${c.name}</div>
+              <div class="text-[10px] text-slate-400">
+                موقع:${p.location ? '✓' : '✕'} | عاصمة:${p.capital ? '✓' : '✕'} | علم:${p.flag ? '✓' : '✕'}
+              </div>
+            </div>
+          </div>
+          <button class="px-2.5 py-1 rounded-lg bg-sky-600 text-white font-bold text-[11px] hover:bg-sky-700 shrink-0">اختبر</button>
+        `;
+        row.querySelector("button").addEventListener("click", () => {
+          launchExam({
+            countries: [c],
+            count: 1,
+            type: "mastery_3_pillars",
+            difficulty: "medium",
+            scope: "single"
+          });
+        });
+        el.appendChild(row);
+      });
+    }
+
+    function renderStatsView() {
+      let mastered = 0, studied = 0, needsReview = 0;
+      let locCount = 0, capCount = 0, flgCount = 0;
+      const mistakenList = [];
+
+      COUNTRIES_DATA.forEach(c => {
+        const p = getCountryProgress(c.id);
+        const status = getCountryStatus(c.id);
+        if (status === "mastered") mastered++;
+        if (p.studied) studied++;
+        if (status === "review" || p.needsReviewFlag) needsReview++;
+        if (p.location) locCount++;
+        if (p.capital) capCount++;
+        if (p.flag) flgCount++;
+        if (p.mistakes > 0) mistakenList.push({ country: c, mistakes: p.mistakes });
+      });
+
+      const worldPct = Math.round((mastered / 194) * 100);
+      document.getElementById("stat-mastered").textContent = mastered;
+      document.getElementById("stat-studied").textContent = studied;
+      document.getElementById("stat-needs-review").textContent = needsReview;
+      document.getElementById("stat-world-pct").textContent = `${worldPct}%`;
+
+      const examsCount = appState.examHistory.length;
+      const examsAvg = examsCount > 0
+        ? Math.round(appState.examHistory.reduce((acc, e) => acc + e.scorePct, 0) / examsCount)
+        : 0;
+      document.getElementById("stat-exams-count").textContent = examsCount;
+      document.getElementById("stat-exams-avg").textContent = `${examsAvg}%`;
+
+      // 3 Aspects Bars
+      const setPillarBar = (pctId, barId, val) => {
+        const pct = Math.round((val / 194) * 100);
+        document.getElementById(pctId).textContent = `${val} / 194 (${pct}%)`;
+        document.getElementById(barId).style.width = `${pct}%`;
+      };
+      setPillarBar("stat-loc-pct", "stat-loc-bar", locCount);
+      setPillarBar("stat-cap-pct", "stat-cap-bar", capCount);
+      setPillarBar("stat-flg-pct", "stat-flg-bar", flgCount);
+
+      // Continents Mastery Bars
+      const contBarsEl = document.getElementById("stat-continents-bars");
+      contBarsEl.innerHTML = "";
+      CONTINENT_STRUCTURE.forEach(cont => {
+        const list = COUNTRIES_DATA.filter(c => c.continent === cont.name);
+        const m = list.filter(c => getCountryStatus(c.id) === "mastered").length;
+        const pct = Math.round((m / list.length) * 100);
+        const div = document.createElement("div");
+        div.innerHTML = `
+          <div class="flex justify-between mb-1">
+            <span>${cont.name}</span>
+            <span>${m} / ${list.length} (${pct}%)</span>
+          </div>
+          <div class="w-full h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+            <div class="h-full bg-emerald-500 transition-all" style="width:${pct}%"></div>
+          </div>
+        `;
+        contBarsEl.appendChild(div);
+      });
+
+      // Exam History Bar Chart
+      const chartEl = document.getElementById("exam-history-chart");
+      chartEl.innerHTML = "";
+      const recentExams = appState.examHistory.slice(-12);
+      if (!recentExams.length) {
+        chartEl.innerHTML = `<span class="text-xs text-slate-400 m-auto">لم تُجرِ أي امتحانات بعد</span>`;
+      } else {
+        recentExams.forEach(ex => {
+          const bar = document.createElement("div");
+          bar.className = "flex-1 flex flex-col items-center justify-end h-full gap-1";
+          bar.innerHTML = `
+            <span class="text-[9px] font-bold text-slate-500">${ex.scorePct}%</span>
+            <div class="w-full rounded-t-md bg-sky-500 transition-all" style="height:${Math.max(8, ex.scorePct)}%"></div>
+          `;
+          chartEl.appendChild(bar);
+        });
+      }
+
+      // Top Mistaken Countries
+      const topMistakesEl = document.getElementById("stat-top-mistakes");
+      topMistakesEl.innerHTML = "";
+      mistakenList.sort((a, b) => b.mistakes - a.mistakes).slice(0, 10).forEach(item => {
+        const chip = document.createElement("span");
+        chip.className = "px-2.5 py-1 rounded-lg bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 font-bold";
+        chip.textContent = `${item.country.name} (${item.mistakes})`;
+        topMistakesEl.appendChild(chip);
+      });
+      if (!mistakenList.length) {
+        topMistakesEl.innerHTML = `<span class="text-slate-400">لا توجد أخطاء مسجلة بعد.</span>`;
+      }
+    }
+
+    function refreshAllUI() {
+      const mastered = COUNTRIES_DATA.filter(c => getCountryStatus(c.id) === "mastered").length;
+      const pct = Math.round((mastered / 194) * 100);
+      document.getElementById("header-mastered-count").textContent = mastered;
+      document.getElementById("sidebar-total-pct").textContent = `${pct}% مكتمل`;
+
+      renderSidebarTree(document.getElementById("sidebar-search").value);
+      updateStudyBarUI();
+      updateMapStylesAndFilters();
+      renderReviewView();
+      renderStatsView();
+      if (selectedCountryId) selectCountryOnMap(selectedCountryId, false);
+    }
+
+    function switchView(viewName) {
+      document.querySelectorAll(".view-section").forEach(sec => sec.classList.add("hidden"));
+      document.getElementById(`view-${viewName}`).classList.remove("hidden");
+
+      document.querySelectorAll(".nav-tab").forEach(tab => {
+        const active = tab.dataset.view === viewName;
+        tab.className = active
+          ? "nav-tab active relative px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition bg-white dark:bg-slate-700 text-sky-600 dark:text-sky-400 shadow-sm"
+          : "nav-tab relative px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white";
+      });
+
+      if (viewName === "review") renderReviewView();
+      if (viewName === "stats") renderStatsView();
+      if (viewName === "exam") {
+        if (!activeExam) {
+          resetExamViewToSetup();
+        } else {
+          updateExamAvailableCount();
+        }
+      }
+    }
+  </script>
+
+  <!-- ===================================================================== -->
+  <!-- MODULE 7: INITIALIZATION & EVENT WIRING                               -->
+  <!-- ===================================================================== -->
+  <script>
+    window.addEventListener("DOMContentLoaded", () => {
+      loadState();
+      initExamSelectors();
+      refreshAllUI();
+      initWorldMap();
+
+      // Responsive initial sidebar state on mobile
+      if (window.innerWidth < 1024) {
+        toggleMobileSidebar(false);
+      }
+
+      // Navigation Tabs
+      document.querySelectorAll(".nav-tab").forEach(btn => {
+        btn.addEventListener("click", () => {
+          if (btn.dataset.view === "exam" && activeExam) {
+            resetExamViewToSetup();
+          }
+          switchView(btn.dataset.view);
+        });
+      });
+
+      // Theme Toggle
+      document.getElementById("theme-toggle-btn").addEventListener("click", () => {
+        applyTheme(appState.theme === "dark" ? "light" : "dark");
+        saveState();
+        updateMapStylesAndFilters();
+      });
+
+      // Sidebar Drawer Toggle
+      document.getElementById("toggle-sidebar-btn").addEventListener("click", () => toggleMobileSidebar());
+      document.getElementById("sidebar-backdrop").addEventListener("click", () => toggleMobileSidebar(false));
+
+      // Sidebar Instant Search
+      const searchInput = document.getElementById("sidebar-search");
+      const clearSearchBtn = document.getElementById("clear-search-btn");
+      searchInput.addEventListener("input", () => {
+        clearSearchBtn.classList.toggle("hidden", !searchInput.value);
+        renderSidebarTree(searchInput.value);
+      });
+      clearSearchBtn.addEventListener("click", () => {
+        searchInput.value = "";
+        clearSearchBtn.classList.add("hidden");
+        renderSidebarTree("");
+      });
+
+      // Show All World
+      document.getElementById("show-all-world-btn").addEventListener("click", () => {
+        focusedRegionFilter = null;
+        document.getElementById("isolate-region-checkbox").checked = false;
+        currentFilterStatus = "all";
+        document.getElementById("map-status-filter").value = "all";
+        resetMapZoom();
+      });
+
+      // Map Modes
+      document.querySelectorAll(".map-mode-btn").forEach(btn => {
+        btn.addEventListener("click", () => setMapMode(btn.dataset.mapMode));
+      });
+
+      // Map Status Filter & Isolate Checkbox
+      document.getElementById("map-status-filter").addEventListener("change", (e) => {
+        currentFilterStatus = e.target.value;
+        updateMapStylesAndFilters();
+      });
+      document.getElementById("isolate-region-checkbox").addEventListener("change", () => {
+        updateMapStylesAndFilters();
+      });
+
+      // Map Zoom Controls
+      document.getElementById("zoom-in-btn").addEventListener("click", () => {
+        mapSvg.transition().duration(300).call(mapZoom.scaleBy, 1.5);
+      });
+      document.getElementById("zoom-out-btn").addEventListener("click", () => {
+        mapSvg.transition().duration(300).call(mapZoom.scaleBy, 0.67);
+      });
+      document.getElementById("zoom-reset-btn").addEventListener("click", resetMapZoom);
+
+      // Inline Map Quiz Controls (Manual Next Button)
+      document.getElementById("map-quiz-next-btn").addEventListener("click", () => {
+        inlineMapQuiz.index++;
+        renderInlineMapQuizStep();
+      });
+      document.getElementById("map-quiz-stop-btn").addEventListener("click", stopInlineMapQuiz);
+
+      // Country Info Card Actions
+      document.getElementById("close-country-card-btn").addEventListener("click", () => {
+        document.getElementById("country-info-card").classList.add("hidden");
+        selectedCountryId = null;
+        updateMapStylesAndFilters();
+      });
+      document.getElementById("mark-studied-btn").addEventListener("click", () => {
+        if (!selectedCountryId) return;
+        markCountryStudied(selectedCountryId);
+        showToast("تم تسجيل الدولة كمدروسة ✓");
+      });
+      document.getElementById("next-country-btn").addEventListener("click", () => navigateStudySet(1));
+      document.getElementById("quiz-single-country-btn").addEventListener("click", () => {
+        if (!selectedCountryId) return;
+        const c = COUNTRY_BY_ID.get(selectedCountryId);
+        launchExam({ countries: [c], count: 1, type: "mastery_3_pillars", difficulty: "medium", scope: "single" });
+      });
+
+      // Active Study Set Navigation
+      document.getElementById("study-set-prev-btn").addEventListener("click", () => navigateStudySet(-1));
+      document.getElementById("study-set-next-btn").addEventListener("click", () => navigateStudySet(1));
+      document.getElementById("clear-study-set-btn").addEventListener("click", () => {
+        appState.studySet = [];
+        appState.studySetIndex = 0;
+        focusedRegionFilter = null;
+        saveState();
+        updateStudyBarUI();
+        updateMapStylesAndFilters();
+      });
+      document.getElementById("test-current-level-btn").addEventListener("click", () => {
+        const list = appState.studySet.map(id => COUNTRY_BY_ID.get(id)).filter(Boolean);
+        if (!list.length) return;
+        launchExam({
+          countries: list,
+          count: list.length,
+          type: "mastery_3_pillars",
+          difficulty: "medium",
+          scope: "current_set"
+        });
+      });
+
+      // Custom Study Batch Modal & Suggested Path
+      const modal = document.getElementById("study-modal");
+      let modalSelectedIds = new Set();
+
+      function openCustomStudyModal() {
+        modalSelectedIds = new Set(appState.studySet);
+        renderModalChecklist("");
+        modal.classList.remove("hidden");
+      }
+
+      function renderModalChecklist(q) {
+        const box = document.getElementById("modal-countries-checklist");
+        box.innerHTML = "";
+        const query = q.trim().toLowerCase();
+        COUNTRIES_DATA.filter(c => !query || c.name.includes(query) || c.capital.includes(query)).forEach(c => {
+          const lbl = document.createElement("label");
+          lbl.className = "flex items-center gap-1.5 p-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer truncate";
+          lbl.innerHTML = `<input type="checkbox" ${modalSelectedIds.has(c.id) ? "checked" : ""} class="rounded text-sky-600" /> <span class="truncate">${c.name}</span>`;
+          lbl.querySelector("input").addEventListener("change", (e) => {
+            e.target.checked ? modalSelectedIds.add(c.id) : modalSelectedIds.delete(c.id);
+            document.getElementById("selected-custom-count").textContent = modalSelectedIds.size;
+          });
+          box.appendChild(lbl);
+        });
+        document.getElementById("selected-custom-count").textContent = modalSelectedIds.size;
+      }
+
+      document.getElementById("open-batch-modal-btn").addEventListener("click", openCustomStudyModal);
+      document.getElementById("close-study-modal-btn").addEventListener("click", () => modal.classList.add("hidden"));
+      document.getElementById("cancel-study-modal-btn").addEventListener("click", () => modal.classList.add("hidden"));
+      document.getElementById("modal-country-search").addEventListener("input", (e) => renderModalChecklist(e.target.value));
+
+      document.querySelectorAll(".quick-batch-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const size = Number(btn.dataset.batchSize);
+          const unmastered = COUNTRIES_DATA.filter(c => getCountryStatus(c.id) !== "mastered");
+          const pool = unmastered.length >= size ? unmastered : COUNTRIES_DATA;
+          const batch = [...pool].sort(() => Math.random() - 0.5).slice(0, size).map(c => c.id);
+          modal.classList.add("hidden");
+          activateStudyGroup(batch, `مجموعة تعلّم سريعة (${batch.length} دول)`);
+        });
+      });
+
+      document.getElementById("apply-custom-study-btn").addEventListener("click", () => {
+        const ids = Array.from(modalSelectedIds);
+        if (!ids.length) {
+          showToast("اختر دولة واحدة على الأقل.");
+          return;
+        }
+        modal.classList.add("hidden");
+        activateStudyGroup(ids, `مجموعتي المخصصة (${ids.length} دول)`);
+      });
+
+      // Optional Suggested Beginner Path (Middle East -> North Africa -> Western Europe -> ...)
+      document.getElementById("suggested-path-btn").addEventListener("click", () => {
+        const order = [
+          "الشرق الأوسط", "شمال أفريقيا", "أوروبا الغربية", "أمريكا الشمالية",
+          "شرق آسيا", "أوروبا الجنوبية", "جنوب آسيا", "جنوب شرق آسيا"
+        ];
+        let nextSub = order.find(sub => {
+          const list = COUNTRIES_DATA.filter(c => c.subregion === sub);
+          return list.some(c => getCountryStatus(c.id) !== "mastered");
+        }) || "الشرق الأوسط";
+
+        const subCountries = COUNTRIES_DATA.filter(c => c.subregion === nextSub);
+        activateStudyGroup(subCountries.map(c => c.id), `المسار المقترح: ${nextSub}`, { type: "subregion", value: nextSub });
+        showToast(`المسار المقترح لك الآن: منطقة ${nextSub}`);
+      });
+
+      // Exam Configurator Events
+      const examScopeSel = document.getElementById("exam-scope-select");
+      examScopeSel.addEventListener("change", () => {
+        const val = examScopeSel.value;
+        document.getElementById("exam-continent-select").classList.toggle("hidden", val !== "continent");
+        document.getElementById("exam-subregion-select").classList.toggle("hidden", val !== "subregion");
+        document.getElementById("exam-custom-pick-box").classList.toggle("hidden", val !== "custom_pick");
+        updateExamAvailableCount();
+      });
+      document.getElementById("exam-continent-select").addEventListener("change", updateExamAvailableCount);
+      document.getElementById("exam-subregion-select").addEventListener("change", updateExamAvailableCount);
+      document.getElementById("exam-custom-search").addEventListener("input", (e) => renderExamCustomPickList(e.target.value));
+
+      document.querySelectorAll(".exam-count-chip").forEach(chip => {
+        chip.addEventListener("click", () => {
+          const avail = getCountriesForExamScope().length;
+          const input = document.getElementById("exam-count-input");
+          input.value = chip.dataset.count === "all" ? avail : Math.min(Number(chip.dataset.count), avail);
+        });
+      });
+
+      document.getElementById("start-exam-btn").addEventListener("click", () => {
+        const pool = getCountriesForExamScope();
+        const count = Number(document.getElementById("exam-count-input").value);
+        const type = document.querySelector('input[name="exam-type"]:checked').value;
+        const difficulty = document.querySelector('input[name="exam-difficulty"]:checked').value;
+
+        if (count > pool.length) {
+          showToast(`العدد المطلوب أكبر من المتاح (${pool.length} دولة).`);
+          return;
+        }
+        launchExam({ countries: pool, count, type, difficulty, scope: examScopeSel.value });
+      });
+
+      // Exam Presets
+      document.querySelectorAll(".exam-preset-card").forEach(card => {
+        card.addEventListener("click", () => {
+          resetExamViewToSetup();
+          const preset = card.dataset.preset;
+          if (preset === "current-level") {
+            const list = appState.studySet.length
+              ? appState.studySet.map(id => COUNTRY_BY_ID.get(id)).filter(Boolean)
+              : COUNTRIES_DATA.slice(0, 10);
+            launchExam({ countries: list, count: list.length, type: "mastery_3_pillars", difficulty: "medium", scope: "current_set" });
+          } else if (preset === "mistakes") {
+            const list = COUNTRIES_DATA.filter(c => getCountryProgress(c.id).needsReviewFlag || getCountryProgress(c.id).mistakes > 0);
+            if (!list.length) { showToast("ممتاز! لا توجد أخطاء مسجلة لديك."); return; }
+            launchExam({ countries: list, count: list.length, type: "mastery_3_pillars", difficulty: "medium", scope: "mistakes" });
+          } else if (preset === "blank-map") {
+            launchExam({ countries: COUNTRIES_DATA, count: 15, type: "location_and_flag", difficulty: "hard", scope: "world" });
+          } else if (preset === "world-random") {
+            launchExam({ countries: COUNTRIES_DATA, count: 15, type: "comprehensive", difficulty: "medium", scope: "world" });
+          }
+        });
+      });
+
+      // Active Exam Controls
+      document.getElementById("exam-next-q-btn").addEventListener("click", () => {
+        activeExam.currentIndex++;
+        renderCurrentExamQuestion();
+      });
+      document.getElementById("abort-exam-btn").addEventListener("click", () => {
+        resetExamViewToSetup();
+        showToast("تم إنهاء الامتحان والعودة إلى شاشة الاختيار.");
+      });
+
+      // Exam Results Controls
+      document.getElementById("retry-same-exam-btn").addEventListener("click", () => {
+        resetExamViewToSetup();
+        if (lastExamConfig) launchExam(lastExamConfig);
+      });
+      document.getElementById("back-to-exam-setup-btn").addEventListener("click", () => {
+        resetExamViewToSetup();
+      });
+      document.getElementById("view-results-on-map-btn").addEventListener("click", () => {
+        resetExamViewToSetup();
+        switchView("map");
+        setMapMode("mastery");
+      });
+
+      // Due Review Session Button
+      document.getElementById("start-due-review-exam-btn").addEventListener("click", () => {
+        const now = Date.now();
+        const due = COUNTRIES_DATA.filter(c => {
+          const p = getCountryProgress(c.id);
+          const status = getCountryStatus(c.id);
+          return status === "review" || p.needsReviewFlag || status === "partial" || (p.nextReview && p.nextReview <= now);
+        });
+        if (!due.length) {
+          showToast("لا توجد دول مستحقة للمراجعة الآن!");
+          return;
+        }
+        launchExam({ countries: due, count: Math.min(15, due.length), type: "mastery_3_pillars", difficulty: "medium", scope: "review" });
+      });
+
+      // Export & Import JSON Progress
+      document.getElementById("export-data-btn").addEventListener("click", () => {
+        const blob = new Blob([JSON.stringify(appState, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `world-atlas-progress-${new Date().toISOString().slice(0, 10)}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast("تم تصدير ملف التقدم بنجاح ✓");
+      });
+
+      document.getElementById("import-data-input").addEventListener("change", (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          try {
+            const imported = JSON.parse(ev.target.result);
+            if (!imported || typeof imported.progress !== "object") throw new Error("Invalid format");
+            appState = { ...appState, ...imported };
+            saveState();
+            applyTheme(appState.theme);
+            refreshAllUI();
+            showToast("تم استيراد بيانات التقدم بنجاح ✓");
+          } catch {
+            showToast("ملف JSON غير صالح.");
+          }
+        };
+        reader.readAsText(file);
+        e.target.value = "";
+      });
+
+      // Two-step Reset Progress Confirmation (no confirm() dialog used)
+      let resetArmed = false;
+      const resetBtn = document.getElementById("reset-all-progress-btn");
+      resetBtn.addEventListener("click", () => {
+        if (!resetArmed) {
+          resetArmed = true;
+          resetBtn.textContent = "اضغط مرة أخرى للتأكيد النهائي";
+          resetBtn.classList.add("bg-rose-600", "text-white");
+          setTimeout(() => {
+            resetArmed = false;
+            resetBtn.textContent = "إعادة ضبط التقدم بالكامل";
+            resetBtn.classList.remove("bg-rose-600", "text-white");
+          }, 4000);
+        } else {
+          appState.progress = {};
+          appState.examHistory = [];
+          appState.studySet = [];
+          saveState();
+          resetArmed = false;
+          resetBtn.textContent = "إعادة ضبط التقدم بالكامل";
+          resetBtn.classList.remove("bg-rose-600", "text-white");
+          refreshAllUI();
+          showToast("تم مسح التقدم والبدء من الصفر.");
+        }
+      });
+    });
+  </script>
+</body>
+</html>
